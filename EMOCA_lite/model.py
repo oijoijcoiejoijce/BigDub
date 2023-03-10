@@ -48,6 +48,7 @@ from enum import Enum
 from omegaconf import OmegaConf, open_dict
 
 import pytorch_lightning.plugins.environments.lightning_environment as le
+from line_profiler_pycharm import profile
 
 
 class DecaMode(Enum):
@@ -96,6 +97,7 @@ class DecaModule(LightningModule):
 
         # instantiate the network
         self.deca = deca_class(config=model_params)
+        self.dub_mask = self.deca.uv_face_eye_mask.clone().to(self.device)
 
         self.mode = DecaMode[str(model_params.mode).upper()]
         self.stage_name = stage_name
@@ -234,6 +236,7 @@ class DecaModule(LightningModule):
         # return shapecode, texcode, expcode, posecode, cam, lightcode, original_code
         return code_list, original_code
 
+    @profile
     def encode(self, batch, training=True) -> dict:
         """
         Forward encoding pass of the model. Takes a batch of images and returns the corresponding latent codes for each image.
@@ -343,9 +346,11 @@ class DecaModule(LightningModule):
         lightcode = codedict['lightcode']
         images = codedict["images"]
 
+        dub_mask = self.dub_mask.to(images.device)
+
         effective_batch_size = shapecode.shape[0]
         masks = []
-        actual_jaw = posecode[..., 3].item()
+        actual_jaw = posecode[..., 3]
 
         for jaw in [0, 0.5]:
 
@@ -373,7 +378,7 @@ class DecaModule(LightningModule):
 
             ops = self.deca.render(verts, trans_verts, albedo, lightcode)
             # mask
-            mask_face_eye = F.grid_sample(self.deca.uv_face_eye_mask.expand(effective_batch_size, -1, -1, -1),
+            mask_face_eye = F.grid_sample(dub_mask.expand(effective_batch_size, -1, -1, -1),
                                           ops['grid'].detach(),
                                           align_corners=False)
             mask_face_eye *= ops["alpha_images"]
@@ -385,6 +390,7 @@ class DecaModule(LightningModule):
         return mask
 
 
+    @profile
     def decode(self, codedict, render=True, **kwargs) -> dict:
         """
         Forward decoding pass of the model. Takes the latent code predicted by the encoding stage and reconstructs and renders the shape.
@@ -552,6 +558,59 @@ class DecaModule(LightningModule):
 
         return codedict
 
+    def quick_decode(self, codedict):
+
+        shapecode = codedict['shapecode']
+        expcode = codedict['expcode']
+        posecode = codedict['posecode']
+        texcode = codedict['texcode']
+        cam = codedict['cam']
+        lightcode = codedict['lightcode']
+        images = codedict["images"]
+
+        effective_batch_size = shapecode.shape[0]
+        if self.uses_texture():
+            albedo = self.deca.flametex(texcode)
+        else:
+            # if not using texture, default to gray
+            albedo = torch.ones([effective_batch_size, 3, self.deca.config.uv_size, self.deca.config.uv_size],
+                                device=shapecode.device) * 0.5
+
+
+        if not isinstance(self.deca.flame, FLAME_mediapipe):
+            verts, landmarks2d, landmarks3d = self.deca.flame(shape_params=shapecode, expression_params=expcode,
+                                                              pose_params=posecode)
+            landmarks2d_mediapipe = None
+        else:
+            verts, landmarks2d, landmarks3d, landmarks2d_mediapipe = self.deca.flame(shapecode, expcode, posecode)
+            # world to camera
+        trans_verts = util.batch_orth_proj(verts, cam)
+        predicted_landmarks = util.batch_orth_proj(landmarks2d, cam)[:, :, :2]
+        # camera to image space
+        trans_verts[:, :, 1:] = -trans_verts[:, :, 1:]
+        predicted_landmarks[:, :, 1:] = - predicted_landmarks[:, :, 1:]
+
+        ops = self.deca.render(verts, trans_verts, albedo, lightcode)
+        predicted_images = ops['images']
+
+        # mask
+        mask_face_eye = F.grid_sample(self.deca.uv_face_eye_mask.expand(effective_batch_size, -1, -1, -1),
+                                      ops['grid'].detach(),
+                                      align_corners=False)
+
+        masks = mask_face_eye * ops['alpha_images']
+
+        if self.deca.config.background_from_input in [True, "input"]:
+            predicted_images = (1. - masks) * images + masks * predicted_images
+        elif self.deca.config.background_from_input in [False, "black"]:
+            predicted_images = masks * predicted_images
+        elif self.deca.config.background_from_input in ["none"]:
+            predicted_images = predicted_images
+        else:
+            raise ValueError(f"Invalid type of background modification {self.deca.config.background_from_input}")
+
+        return predicted_images
+
     def decode_unposed_mesh(self, codedict):
         shapecode = codedict['shapecode']
         expcode = codedict['expcode']
@@ -615,6 +674,9 @@ class DecaModule(LightningModule):
         mask_face_eye = F.grid_sample(self.deca.uv_face_eye_mask.expand(effective_batch_size, -1, -1, -1),
                                       ops['grid'].detach(),
                                       align_corners=False)
+        mask_dub = F.grid_sample(self.dub_mask.to(0).expand(effective_batch_size, -1, -1, -1),
+                                      ops['grid'].detach(),
+                                      align_corners=False)
         # images
         predicted_images = ops['grid']
 
@@ -670,7 +732,7 @@ class DecaModule(LightningModule):
 
         codedict['predicted_images'] = predicted_images
         codedict['outer_mask'] = outer_mask
-        codedict['inner_mask'] = mask_face_eye * ops['alpha_images']
+        codedict['inner_mask'] = mask_dub * ops['alpha_images']
         codedict['detail'] = predicted_detailed_image
 
         return codedict
@@ -1107,8 +1169,8 @@ def instantiate_deca(cfg, stage, prefix, checkpoint=None, checkpoint_kwargs=None
     """
 
     if checkpoint is None:
-        deca = DecaModule(cfg.model, cfg.learning, cfg.inout, prefix)
-        if cfg.model.resume_training:
+        deca = DecaModule(cfg.emoca, cfg.learning, cfg.inout, prefix)
+        if cfg.emoca.resume_training:
             # This load the DECA model weights from the original DECA release
             print("[WARNING] Loading EMOCA checkpoint pretrained by the old code")
             deca.deca._load_old_checkpoint()
@@ -1119,5 +1181,5 @@ def instantiate_deca(cfg, stage, prefix, checkpoint=None, checkpoint_kwargs=None
             mode = True
         else:
             mode = False
-        deca.reconfigure(cfg.model, cfg.inout, cfg.learning, prefix, downgrade_ok=True, train=mode)
+        deca.reconfigure(cfg.emoca, cfg.inout, cfg.learning, prefix, downgrade_ok=True, train=mode)
     return deca
