@@ -246,16 +246,20 @@ class AudioEncoder(nn.Module):
 
 class Discriminator(nn.Module):
 
-    def __init__(self, in_c, init_h_c=64, n_layers=3):
+    def __init__(self, in_c, init_h_c=64, n_layers=5, image_size=256):
         super(Discriminator, self).__init__()
 
-        self.in_conv = nn.Conv2d(in_c, init_h_c, padding=3, kernel_size=1, padding_mode='reflect')
+        self.in_conv = nn.Conv2d(in_c, init_h_c, padding=1, kernel_size=3, padding_mode='reflect')
+        self.image_size = image_size
+        self.final_size = image_size // (2 ** n_layers)
         downs = []
         nf = init_h_c
         for layer in range(n_layers):
-            downs.append(DownBlock(nf, nf * 2))
-            nf *= 2
+            downs.append(DownBlock(nf, nf))
+            # nf *= 2
         self.downs = nn.ModuleList(downs)
+
+        # TODO: Add attention layer
 
         self.out_conv = nn.Sequential(
             nn.Conv2d(nf, nf, kernel_size=3, padding=1, padding_mode='reflect'),
@@ -264,9 +268,15 @@ class Discriminator(nn.Module):
             nn.Conv2d(nf, 1, kernel_size=1)
         )
 
+        #self.out_fc = nn.Sequential(
+        #    nn.Linear(nf * self.final_size * self.final_size, 512),
+        #    nn.LeakyReLU(0.2, True),
+        #    nn.Linear(512, 1)
+        #)
+
+
     @profile
     def forward(self, x):
-
         x = self.in_conv(x)
         for down in self.downs:
             x = down(x)
