@@ -34,6 +34,7 @@ class DubbingDataset(Dataset):
         # Add the path to the index
         for i in range(len(self.data)):
             self.data.loc[i, 'v_path'] = os.path.join(self.data_root, self.data.loc[i, 'v_path'])
+            print(os.path.join(self.data_root, self.data.loc[i, 'v_path']))
             print(self.data.loc[i, 'v_path'], self.data_root)
 
 
