@@ -89,7 +89,8 @@ class Audio2Expression(pl.LightningModule):
     def prepare_textures(self, IDs, tex_size=256, n_channels=8):
         textures = {}
         for ID in IDs:
-            textures[ID] = torch.randn((1, n_channels, tex_size, tex_size), device=self.device, requires_grad=True)
+            textures[ID] = nn.Parameter(torch.randn((1, n_channels, tex_size, tex_size),
+                                                    device=self.device, requires_grad=True))
         self.textures = nn.ParameterDict(textures)
 
     def prepare_network_input(self, frames, uv, inner_mask, outer_mask, IDs):
