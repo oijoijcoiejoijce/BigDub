@@ -47,9 +47,6 @@ torch.backends.cudnn.benchmark = True
 from enum import Enum
 from omegaconf import OmegaConf, open_dict
 
-import pytorch_lightning.plugins.environments.lightning_environment as le
-# from line_profiler_pycharm import profile
-
 
 class DecaMode(Enum):
     COARSE = 1  # when switched on, only coarse part of DECA-based networks is used

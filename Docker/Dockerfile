@@ -20,5 +20,5 @@ RUN git config --global --add safe.directory /app
 
 RUN apt-get install espeak -y
 RUN pip install phonemizer
-RUN pip install pytorch-lightning omegaconf scikit-image
-RUN pip install pandas
+RUN pip install lightning omegaconf scikit-image
+RUN pip install pandas adabound
