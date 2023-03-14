@@ -426,6 +426,8 @@ def main():
     #index_path = os.path.join(config.get('Paths', 'data'), 'index.csv')
     data_root = config.get('Paths', 'data')
     batch_size = int(config.getint('NR Training', 'batch_size'))
+    n_train_workers = int(config.getint('NR Training', 'n_train_workers'))
+    n_val_workers = int(config.getint('NR Training', 'n_val_workers'))
     checkpoint_path = config.get('Paths', 'NR checkpoint')
 
     torch.backends.cudnn.benchmark = True
@@ -435,7 +437,7 @@ def main():
             data_types=[DataTypes.MEL, DataTypes.Params, DataTypes.Frames, DataTypes.ID], T=5),
         batch_size=batch_size,
         shuffle=True,
-        num_workers=2,
+        num_workers=n_train_workers,
         pin_memory=True
     )
 
@@ -444,7 +446,7 @@ def main():
             data_types=[DataTypes.MEL, DataTypes.Params, DataTypes.Frames, DataTypes.ID], split='test', T=5),
         batch_size=batch_size,
         shuffle=True,
-        num_workers=0
+        num_workers=n_val_workers
     )
     wandb_logger = WandbLogger(project='DubbingForExtras_NR')
     model = Audio2Expression(config, train_dataloader.dataset.ids, logger=wandb_logger)
