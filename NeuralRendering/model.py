@@ -262,7 +262,7 @@ class Audio2Expression(pl.LightningModule):
                     d[key] = d[key][None]
         return d
 
-    def on_epoch_end(self) -> None:
+    def on_train_epoch_end(self) -> None:
 
         if self.wandb_logger is None:
             return
