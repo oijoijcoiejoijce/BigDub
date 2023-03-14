@@ -267,6 +267,9 @@ class Audio2Expression(pl.LightningModule):
         if self.wandb_logger is None:
             return
 
+        if self.current_epoch % 5 != 0:
+            return
+
         for i in range(3):
             # A bit hacky but it works
             gen, length = self.trainer._data_connector._val_dataloader_source.dataloader().dataset.get_video_generator()
