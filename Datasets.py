@@ -71,6 +71,7 @@ class DubbingDataset(Dataset):
 
     def get_video_window(self, idxs, video_path):
 
+        print(video_path)
         frames = []
         cap = cv2.VideoCapture(video_path)
         for idx in idxs:
