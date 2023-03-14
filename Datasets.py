@@ -37,8 +37,6 @@ class DubbingDataset(Dataset):
             if path[0] == '/':
                 path = path[1:]
             self.data.loc[i, 'v_path'] = os.path.join(self.data_root, path)
-            print(self.data.loc[i, 'v_path'])
-
 
 
         if split != 'all':
