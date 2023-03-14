@@ -5,7 +5,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-from line_profiler_pycharm import profile
+# from line_profiler_pycharm import profile
 
 ACTIVATIONS = {
     'relu': nn.ReLU,
@@ -28,7 +28,7 @@ class WSLinear(nn.Module):
         nn.init.normal_(self.linear.weight)
         nn.init.zeros_(self.bias)
 
-    @profile
+    # @profile
     def forward(self, x):
         return self.linear(x * self.scale) + self.bias
 
@@ -42,7 +42,7 @@ class AdaIN(nn.Module):
         self.mu = WSLinear(style_dim, n_feat)
         self.sigma = WSLinear(style_dim, n_feat)
 
-    @profile
+    # @profile
     def forward(self, x, style):
         x = self.norm(x)
         mu = self.mu(style).unsqueeze(2).unsqueeze(3)
@@ -71,7 +71,7 @@ class BasicBlock(nn.Module):
             self.norm1 = nn.Identity()
             self.norm2 = nn.Identity()
 
-    @profile
+    # @profile
     def forward(self, x):
 
         x = self.conv1(x)
@@ -105,7 +105,7 @@ class ResBlock(nn.Module):
             self.norm1 = nn.Identity()
             self.norm2 = nn.Identity()
 
-    @profile
+    # @profile
     def forward(self, x):
 
         x0 = self.conv1(x)
@@ -128,7 +128,7 @@ class DownBlock(nn.Module):
         self.norm = nn.InstanceNorm2d(in_c)
         self.net = BasicBlock(in_c, out_c)
 
-    @profile
+    # @profile
     def forward(self, x):
         x = self.down(x)
         x = self.norm(x)
@@ -143,7 +143,7 @@ class UpBlock(nn.Module):
         self.net = BasicBlock(in_c * 2, out_c, use_norm=use_norm)
         self.up = nn.UpsamplingBilinear2d(scale_factor=downscale)
 
-    @profile
+    # @profile
     def forward(self, x, x_skip):
         x = torch.cat((x_skip, x), dim=1)
         x = self.net(x)
@@ -189,7 +189,7 @@ class UnetAdaIN(nn.Module):
             nn.LeakyReLU()
         )
 
-    @profile
+    # @profile
     def forward(self, x, x_ref):
 
         # x_ref = self.mapping(x_ref)
@@ -219,7 +219,7 @@ class AudioEncoder(nn.Module):
 
     def __init__(self):
         super(AudioEncoder, self).__init__()
-        self.net = nn.Sequential(
+        self.net = nn.ModuleList([
             BasicBlock(1, 32),
             BasicBlock(32, 32),
             BasicBlock(32, 32),
@@ -237,11 +237,14 @@ class AudioEncoder(nn.Module):
 
             nn.Conv2d(256, 512, kernel_size=3, stride=1, padding=0),
             nn.ReLU(),
-            nn.Conv2d(512, 512, kernel_size=1, stride=1, padding=0))
+            nn.Conv2d(512, 512, kernel_size=1, stride=1, padding=0)
+        ])
 
-    @profile
+    # @profile
     def forward(self, x):
-        return self.net(x)
+        for layer in self.net:
+            x = layer(x)
+        return x
 
 
 class Discriminator(nn.Module):
@@ -275,7 +278,7 @@ class Discriminator(nn.Module):
         #)
 
 
-    @profile
+    # @profile
     def forward(self, x):
         x = self.in_conv(x)
         for down in self.downs:
@@ -306,7 +309,7 @@ class Audio2Parameter(nn.Module):
             nn.Linear(256, n_params)
         )
 
-    @profile
+    # @profile
     def forward(self, audio, cond=None):
         # audio = (B, 80, 16), cond = None or (B, C)
         # out = (B, N)
@@ -355,7 +358,7 @@ class TripleSyncnet(nn.Module):
             DownBlock(256, 512),  # (B, 512, 1, 1)
         )
 
-    @profile
+    # @profile
     def forward(self, audio=None, params=None, video=None):
         # Audio = (B, 80, 16), params = (B, T, C), video = (B, 3, 256, 256)
 

@@ -9,7 +9,7 @@ import face_alignment
 import numpy as np
 import mediapipe as mp
 
-from line_profiler_pycharm import profile
+#from line_profiler_pycharm import profile
 
 # os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
 torch.backends.cudnn.benchmark = True
@@ -43,7 +43,7 @@ class MPTracker:
             lmks = np.array([[lmk.x * img.shape[1], lmk.y * img.shape[0]] for lmk in lmks])
             return lmks[self.lmk_embedding]
 
-@profile
+# @profile
 def main():
     checkpoint = "C:/Users/jacks/Documents/Academic/Code/emoca/assets/EMOCA/models/EMOCA_v2_mp/detail/checkpoints/deca-epoch=11-val_loss/dataloader_idx_0=3.25273848.ckpt"
     config = "C:/Users/jacks/Documents/Academic/Code/emoca/assets/EMOCA/models/EMOCA_v2_mp/cfg.yaml"

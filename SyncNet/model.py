@@ -5,6 +5,9 @@ from pytorch_lightning import Trainer
 from networks.syncnet import TripleSyncnet
 from pytorch_lightning.loggers import WandbLogger
 
+import os
+os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
+
 class SyncNet(pl.LightningModule):
 
         def __init__(self):
@@ -25,7 +28,7 @@ class SyncNet(pl.LightningModule):
 
             mel_enc, params_enc, vid_enc = self.net(audio, params, frames)
             other_mel_enc, other_params_enc, other_vid_enc = self.net(other_audio, other_params, other_frames)
-            loss = self.net.loss(mel_enc, params_enc, vid_enc, other_mel_enc, other_params_enc, other_vid_enc)
+            loss = self.net.compute_loss(mel_enc, params_enc, vid_enc, other_mel_enc, other_params_enc, other_vid_enc)
 
             self.log('train_loss', loss)
             return loss
@@ -40,11 +43,11 @@ class SyncNet(pl.LightningModule):
 
             mel_enc, params_enc, vid_enc = self.net(audio, params, frames)
             other_mel_enc, other_params_enc, other_vid_enc = self.net(other_audio, other_params, other_frames)
-            loss = self.net.loss(mel_enc, params_enc, vid_enc, other_mel_enc, other_params_enc, other_vid_enc)
+            loss = self.net.compute_loss(mel_enc, params_enc, vid_enc, other_mel_enc, other_params_enc, other_vid_enc)
             self.log('val_loss', loss, on_epoch=True, prog_bar=True)
 
         def configure_optimizers(self):
-            return torch.optim.Adam(self.net.parameters(), lr=0.02)
+            return torch.optim.Adam(self.net.parameters(), lr=1e-4)
 
 def main():
     from Datasets import DubbingDataset, DataTypes
@@ -57,13 +60,15 @@ def main():
 
     #index_path = os.path.join(config.get('Paths', 'data'), 'index.csv')
     data_root = config.get('Paths', 'data')
+    batch_size = int(config.getint('SyncNet Training', 'batch_size'))
+    grad_acc = int(config.getint('SyncNet Training', 'gradient_accumulate_every'))
 
     torch.backends.cudnn.benchmark = True
 
     train_dataloader = torch.utils.data.DataLoader(
         DubbingDataset(data_root,
             data_types=[DataTypes.MEL, DataTypes.Params, DataTypes.Frames], T=5, syncet=True),
-        batch_size=1,
+        batch_size=batch_size,
         shuffle=True,
         num_workers=2,
         pin_memory=True
@@ -73,7 +78,7 @@ def main():
         DubbingDataset(data_root,
             data_types=[DataTypes.MEL, DataTypes.Params, DataTypes.Frames], split='test', T=5,
                        syncet=True),
-        batch_size=1,
+        batch_size=batch_size,
         shuffle=True,
         num_workers=0
     )
@@ -82,7 +87,7 @@ def main():
     trainer = pl.Trainer(gpus=1, max_epochs=100,
                          callbacks=[ModelSummary(max_depth=2)],
                          default_root_dir="C:/Users/jacks/Documents/Data/DubbingForExtras/checkpoints/sync/basic",
-                         logger=wandb_logger)
+                         logger=wandb_logger, gradient_clip_val=1.0, accumulate_grad_batches=grad_acc)
     trainer.fit(model, train_dataloader, val_dataloader)
 
 if __name__ == '__main__':

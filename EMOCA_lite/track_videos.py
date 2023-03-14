@@ -11,7 +11,7 @@ from glob import glob
 import numpy as np
 import mediapipe as mp
 
-from line_profiler_pycharm import profile
+# from line_profiler_pycharm import profile
 torch.backends.cudnn.benchmark = True
 
 
@@ -36,7 +36,7 @@ class MPTracker:
             lmks = np.array([[lmk.x * img.shape[1], lmk.y * img.shape[0]] for lmk in lmks])
             return lmks[self.lmk_embedding]
 
-@profile
+# @profile
 def process(video_path, det, model, renderer, show_vis=False):
     with torch.no_grad():
         cap = cv2.VideoCapture(video_path)

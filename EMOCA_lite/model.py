@@ -48,7 +48,7 @@ from enum import Enum
 from omegaconf import OmegaConf, open_dict
 
 import pytorch_lightning.plugins.environments.lightning_environment as le
-from line_profiler_pycharm import profile
+# from line_profiler_pycharm import profile
 
 
 class DecaMode(Enum):
@@ -236,7 +236,7 @@ class DecaModule(LightningModule):
         # return shapecode, texcode, expcode, posecode, cam, lightcode, original_code
         return code_list, original_code
 
-    @profile
+    # @profile
     def encode(self, batch, training=True) -> dict:
         """
         Forward encoding pass of the model. Takes a batch of images and returns the corresponding latent codes for each image.
@@ -390,7 +390,7 @@ class DecaModule(LightningModule):
         return mask
 
 
-    @profile
+    # @profile
     def decode(self, codedict, render=True, **kwargs) -> dict:
         """
         Forward decoding pass of the model. Takes the latent code predicted by the encoding stage and reconstructs and renders the shape.

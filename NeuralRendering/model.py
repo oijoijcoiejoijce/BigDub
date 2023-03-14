@@ -119,12 +119,17 @@ class Audio2Expression(pl.LightningModule):
         D_loss_real = F.mse_loss(D_pred_real, torch.ones_like(D_pred_real))
         D_loss_fake = F.mse_loss(D_pred_fake, torch.zeros_like(D_pred_fake))
 
-        D_loss = D_loss_real + D_loss_fake
+        D_loss = ((D_loss_real + D_loss_fake)/2)
+
+        loss = D_loss * 0.02
 
         wandb.log({"D_loss": D_loss, "D_loss_real": D_loss_real, "D_loss_fake": D_loss_fake},
                   step=self.trainer.global_step)
         opt_discriminator.zero_grad()
-        self.manual_backward(D_loss)
+
+        if D_loss > 0.01:
+            self.manual_backward(loss)
+
         opt_discriminator.step()
 
     def forward(self, batch):
@@ -163,7 +168,7 @@ class Audio2Expression(pl.LightningModule):
         D_pred_fake = self.discriminator(network_output)
         loss_G_adv = F.mse_loss(D_pred_fake, torch.ones_like(D_pred_fake))
 
-        loss = (1.0 * loss_img) + (1.0 * loss_tex) + (0.07 * loss_G_adv) + (1.0 * loss_vgg)
+        loss = (1.0 * loss_img) + (1.0 * loss_tex) + (0.02 * loss_G_adv) + (1.0 * loss_vgg)
 
         # loss = loss_img
         opt_tex.zero_grad()
@@ -265,35 +270,39 @@ class Audio2Expression(pl.LightningModule):
 
     def create_video_from_generator(self, gen, length):
         video = []
-        for frame_idx in range(length):
-            batch = gen(frame_idx)
+        with torch.no_grad():
+            for frame_idx in range(length):
+                batch = gen(frame_idx)
 
-            batch = self.dict_to_torch(batch, expand_batch=True)
+                batch = self.dict_to_torch(batch, expand_batch=True)
 
-            params, frames, uv, inner_mask, outer_mask = self.prepare_input(batch)
-            IDs = batch['ID']
-            # Prepare textures
+                params, frames, uv, inner_mask, outer_mask = self.prepare_input(batch)
+                IDs = batch['ID']
+                # Prepare textures
 
-            B, T, C, H, W = frames.shape
+                B, T, C, H, W = frames.shape
 
-            # Prepare network input
-            network_input = self.prepare_network_input(frames, uv, inner_mask, outer_mask, IDs)
+                # Prepare network input
+                network_input = self.prepare_network_input(frames, uv, inner_mask, outer_mask, IDs)
 
-            # TODO: Condition on audio
-            cond = torch.ones((B * T, 512), device=self.device)
+                # TODO: Condition on audio
+                cond = torch.ones((B * T, 512), device=self.device)
 
-            # Resize
-            network_input = self.resize(network_input.reshape((B * T, *network_input.shape[2:])))
-            frames = self.resize(frames.reshape((B * T, *frames.shape[2:])))
-            frames = frames.reshape((B, T, *frames.shape[1:]))
+                # Resize
+                network_input = self.resize(network_input.reshape((B * T, *network_input.shape[2:])))
+                frames = self.resize(frames.reshape((B * T, *frames.shape[2:])))
+                frames = frames.reshape((B, T, *frames.shape[1:]))
 
-            # Train network
-            network_output = self.unet(network_input, cond)
-            network_output = network_output.reshape((B, T, *network_output.shape[1:]))
+                # Train network
+                network_output = self.unet(network_input, cond)
+                network_output = network_output.reshape((B, T, *network_output.shape[1:]))
 
-            video.append(network_output[0, network_output.shape[1] // 2].cpu().detach().numpy())
+                vid_frame = torch.cat([frames[0, network_output.shape[1] // 2],
+                                       network_output[0, network_output.shape[1] // 2]],
+                                      dim=2).cpu().detach().numpy()
+                video.append(vid_frame)
 
-        video = (np.stack(video, axis=0).clip(0, 1) * 255).astype(np.uint8)
+            video = (np.stack(video, axis=0).clip(0, 1) * 255).astype(np.uint8)
         return video
 
     def prepare_input(self, batch):
@@ -399,20 +408,27 @@ def main():
     from Datasets import DubbingDataset, DataTypes
     from pytorch_lightning.callbacks import ModelSummary
     import configparser
+    import argparse
 
-    config_path = 'configs/Laptop.ini'
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--config', type=str, default='configs/Laptop.ini')
+    args = parser.parse_args()
+
+    config_path = args.config
     config = configparser.ConfigParser()
     config.read(config_path)
 
     #index_path = os.path.join(config.get('Paths', 'data'), 'index.csv')
     data_root = config.get('Paths', 'data')
+    batch_size = int(config.getint('NR Training', 'batch_size'))
+    checkpoint_path = config.get('Paths', 'NR checkpoint')
 
     torch.backends.cudnn.benchmark = True
 
     train_dataloader = torch.utils.data.DataLoader(
         DubbingDataset(data_root,
             data_types=[DataTypes.MEL, DataTypes.Params, DataTypes.Frames, DataTypes.ID], T=5),
-        batch_size=1,
+        batch_size=batch_size,
         shuffle=True,
         num_workers=2,
         pin_memory=True
@@ -421,7 +437,7 @@ def main():
     val_dataloader = torch.utils.data.DataLoader(
         DubbingDataset(data_root,
             data_types=[DataTypes.MEL, DataTypes.Params, DataTypes.Frames, DataTypes.ID], split='test', T=5),
-        batch_size=1,
+        batch_size=batch_size,
         shuffle=True,
         num_workers=0
     )
@@ -429,7 +445,7 @@ def main():
     model = Audio2Expression(config, train_dataloader.dataset.ids, logger=wandb_logger)
     trainer = pl.Trainer(gpus=1, max_epochs=100,
                          callbacks=[ModelSummary(max_depth=2)],
-                         default_root_dir="C:/Users/jacks/Documents/Data/DubbingForExtras/checkpoints/render/basic")
+                         default_root_dir=checkpoint_path)
     trainer.fit(model, train_dataloader, val_dataloader)
 
 if __name__ == '__main__':
