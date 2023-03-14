@@ -24,6 +24,9 @@ class DubbingDataset(Dataset):
     def __init__(self, data_root, data_types, T=5, syncet=True, split='train', fix_video=None):
         super(DubbingDataset, self).__init__()
         self.data_root = data_root
+
+        print(self.data_root)
+
         self.data = pd.read_csv(os.path.join(self.data_root, 'index.csv'))
         self.syncet = syncet
         self.data_types = data_types
@@ -31,6 +34,7 @@ class DubbingDataset(Dataset):
         # Add the path to the index
         for i in range(len(self.data)):
             self.data.loc[i, 'v_path'] = os.path.join(self.data_root, self.data.loc[i, 'v_path'])
+            print(self.data.loc[i, 'v_path'])
 
         if split != 'all':
             self.data = self.data[self.data['split'] == split]
@@ -70,8 +74,6 @@ class DubbingDataset(Dataset):
         return torch.cat(frames)
 
     def get_video_window(self, idxs, video_path):
-
-        print(video_path)
         frames = []
         cap = cv2.VideoCapture(video_path)
         for idx in idxs:
