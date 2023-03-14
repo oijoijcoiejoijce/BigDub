@@ -1,10 +1,10 @@
 FROM pytorch/pytorch:1.11.0-cuda11.3-cudnn8-devel
 
+RUN apt-key adv --keyserver keyserver.ubuntu.com --recv-keys A4B469963BF863CC
+
 RUN apt-get -y update
 RUN apt-get -y upgrade
 RUN apt-get -y install git
-
-RUN apt-key adv --keyserver keyserver.ubuntu.com --recv-keys A4B469963BF863CC
 
 RUN pip install opencv-python matplotlib kornia chumpy ConfigArgParse face-alignment face-detection-tflite mediapipe wandb
 WORKDIR /app
