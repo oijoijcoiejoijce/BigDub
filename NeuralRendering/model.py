@@ -452,7 +452,7 @@ def main():
     model = Audio2Expression(config, train_dataloader.dataset.ids, logger=wandb_logger)
     trainer = pl.Trainer(gpus=1, max_epochs=100,
                          callbacks=[ModelSummary(max_depth=2)],
-                         default_root_dir=checkpoint_path)
+                         default_root_dir=checkpoint_path, num_sanity_val_steps=0)
     trainer.fit(model, train_dataloader, val_dataloader)
 
 if __name__ == '__main__':
