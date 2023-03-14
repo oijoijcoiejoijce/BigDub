@@ -445,7 +445,7 @@ def main():
         DubbingDataset(data_root,
             data_types=[DataTypes.MEL, DataTypes.Params, DataTypes.Frames, DataTypes.ID], split='test', T=5),
         batch_size=batch_size,
-        shuffle=True,
+        shuffle=False,
         num_workers=n_val_workers
     )
     wandb_logger = WandbLogger(project='DubbingForExtras_NR')
