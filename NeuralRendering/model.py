@@ -1,3 +1,7 @@
+import sys
+from pathlib import Path
+sys.path.append(str(Path(__file__).parent.parent))
+
 import pytorch_lightning as pl
 import torch
 import torch.nn.functional as F
