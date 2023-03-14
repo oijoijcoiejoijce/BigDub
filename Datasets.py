@@ -211,6 +211,7 @@ class DubbingDataset(Dataset):
                 return ret
 
             except Exception as e:
+                print(e)
                 continue
 
     def get_video_generator(self, specific_video=None):
