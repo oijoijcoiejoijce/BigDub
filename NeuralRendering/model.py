@@ -40,7 +40,7 @@ def warp_image_tensor(tensor, tform, img_size):
 
 class Audio2Expression(pl.LightningModule):
 
-    def __init__(self, config, IDs, nc=8, T=5, logger=None):
+    def __init__(self, config, IDs, nc=16, T=5, logger=None):
         super().__init__()
         # self.save_hyperparameters()
         self.automatic_optimization = False
@@ -80,7 +80,7 @@ class Audio2Expression(pl.LightningModule):
 
         self.prepare_textures(IDs, n_channels=nc)
         # self.unet = UnetAdaIN(3, 3).to(self.device)
-        self.unet = UnetRenderer('UNET_5_level_ADAIN', nc, 3, norm_layer=nn.InstanceNorm2d)
+        self.unet = UnetRenderer('UNET_8_level_ADAIN', nc, 3, norm_layer=nn.InstanceNorm2d)
         self.discriminator = define_D(3*T, 64, 'basic', norm='instance', init_type='normal')
         self.vgg = VGGLOSS().to(self.device)
 
@@ -197,12 +197,18 @@ class Audio2Expression(pl.LightningModule):
     def training_step(self, batch):
 
         opt_tex, opt_img, opt_discriminator = self.optimizers()
+        scheduler_tex, scheduler_img, scheduler_discriminator = self.lr_schedulers()
 
         network_output, frames, network_input = self.forward(batch)
 
         self.train_discriminator(frames, network_output, opt_discriminator)
 
         loss = self.train_generator(network_output, frames, network_input, opt_tex, opt_img)
+        if self.current_epoch > 50:
+            scheduler_tex.step()
+            scheduler_img.step()
+            scheduler_discriminator.step()
+
         return loss
 
     def on_validation_epoch_start(self) -> None:
@@ -345,10 +351,15 @@ class Audio2Expression(pl.LightningModule):
         return params, frames, uv, inner_mask, outer_mask
 
     def configure_optimizers(self):
-        tex_opt = torch.optim.Adam(self.textures.values(), lr=1e-3)
-        img_opt = torch.optim.Adam(self.unet.parameters(), lr=1e-4)
-        dis_opt = torch.optim.Adam(self.discriminator.parameters(), lr=1e-4)
-        return tex_opt, img_opt, dis_opt
+        tex_opt = torch.optim.Adam(self.textures.values(), lr=2e-3, betas=(0.5, 0.999))
+        img_opt = torch.optim.Adam(self.unet.parameters(), lr=2e-4, betas=(0.5, 0.999))
+        dis_opt = torch.optim.Adam(self.discriminator.parameters(), lr=2e-4, betas=(0.5, 0.999))
+
+        tex_scheduler = torch.optim.lr_scheduler.LinearLR(tex_opt, 1.0, 0.0, 100)
+        img_scheduler = torch.optim.lr_scheduler.LinearLR(img_opt, 1.0, 0.0, 100)
+        dis_scheduler = torch.optim.lr_scheduler.LinearLR(dis_opt, 1.0, 0.0, 100)
+        return [tex_opt, img_opt, dis_opt], [tex_scheduler, img_scheduler, dis_scheduler]
+
 
     def fit_to_new_ID(self, dataloader, n_epoch=10, ID_name=None):
         """ Fit the model to a new ID, optimizing only the texture

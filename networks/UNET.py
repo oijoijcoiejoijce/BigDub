@@ -490,6 +490,23 @@ class UnetRenderer(nn.Module):
             unet_block = UnetSkipConnectionBlock_ADAIN(output_nc, ngf, input_nc=input_nc, submodule=unet_block,
                                                     outermost=True, norm_layer=nn.InstanceNorm2d)
 
+        elif renderer == 'UNET_8_level_ADAIN':
+            print('>>>> UNET_8_level_ADAIN <<<<')
+            num_downs = 8
+            unet_block = UnetSkipConnectionBlock_ADAIN(ngf * 8, ngf * 8, input_nc=None, submodule=None, norm_layer=norm_layer,
+                                                 innermost=True)
+            for i in range(num_downs - 5):
+                unet_block = UnetSkipConnectionBlock_ADAIN(ngf * 8, ngf * 8, input_nc=None, submodule=unet_block,
+                                                     norm_layer=norm_layer, use_dropout=use_dropout)
+            unet_block = UnetSkipConnectionBlock_ADAIN(ngf * 4, ngf * 8, input_nc=None, submodule=unet_block,
+                                                 norm_layer=norm_layer)
+            unet_block = UnetSkipConnectionBlock_ADAIN(ngf * 2, ngf * 4, input_nc=None, submodule=unet_block,
+                                                 norm_layer=norm_layer)
+            unet_block = UnetSkipConnectionBlock_ADAIN(ngf, ngf * 2, input_nc=None, submodule=unet_block,
+                                                 norm_layer=norm_layer)
+            unet_block = UnetSkipConnectionBlock_ADAIN(output_nc, ngf, input_nc=input_nc, submodule=unet_block,
+                                                 outermost=True, norm_layer=norm_layer)
+
         self.model = unet_block
 
     def forward(self, features, cond=None):

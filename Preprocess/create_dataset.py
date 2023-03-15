@@ -5,6 +5,7 @@ import os
 import cv2
 
 IDs = []
+WITHOLD_IDS = ['M009', 'M030', 'W011']
 def get_ID(video_path, video_idx):
     id = os.path.basename(video_path).split('_')[0]
     return id
@@ -37,7 +38,10 @@ def main(data_root):
 
         # TODO: We wont have ID labels will need to use facial recognition
         face_ID.append(get_ID(video, v_idx))
-        if int(os.path.basename(video).split('_')[1]) < 32:
+
+        if get_ID(video, v_idx) in WITHOLD_IDS:
+            split.append('withold')
+        elif int(os.path.basename(video).split('_')[1]) < 32:
             split.append('train')
         else:
             split.append('test')
