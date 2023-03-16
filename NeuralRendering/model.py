@@ -466,14 +466,14 @@ def main():
     wandb_logger = WandbLogger(project='DubbingForExtras_NR')
     model = Audio2Expression(config, train_dataloader.dataset.ids, logger=wandb_logger)
 
-    if args.load_checkpoint:
-        model.load_from_checkpoint(args.load_checkpoint, config=config, IDs=train_dataloader.dataset.ids,
-                                   logger=wandb_logger)
-
     trainer = pl.Trainer(gpus=1, max_epochs=100,
                          callbacks=[ModelSummary(max_depth=2)],
                          default_root_dir=checkpoint_path, num_sanity_val_steps=0)
-    trainer.fit(model, train_dataloader, val_dataloader)
+
+    if args.load_checkpoint:
+        trainer.fit(model, train_dataloader, val_dataloader, ckpt_path=args.load_checkpoint)
+    else:
+        trainer.fit(model, train_dataloader, val_dataloader)
 
 if __name__ == '__main__':
     main()
