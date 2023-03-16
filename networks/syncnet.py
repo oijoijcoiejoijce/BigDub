@@ -57,6 +57,7 @@ class TripleSyncnet(nn.Module):
             audio_enc = self.audio_enc(audio[:, None, :, :])
             audio_enc = audio_enc.reshape((audio_enc.shape[0], -1))
             audio_enc = F.relu(audio_enc)
+            #audio_enc = torch.sigmoid(audio_enc)
             audio_enc = F.normalize(audio_enc, p=2, dim=-1)
         return audio_enc
 
@@ -66,6 +67,7 @@ class TripleSyncnet(nn.Module):
             params = params.reshape((params.shape[0], -1))
             param_enc = self.param_enc(params)
             param_enc = F.relu(param_enc)
+            #param_enc = torch.sigmoid(param_enc)
             param_enc = F.normalize(param_enc, p=2, dim=-1)
         return param_enc
 
@@ -90,6 +92,7 @@ class TripleSyncnet(nn.Module):
                 video = layer(video)
 
             video = F.relu(video)
+            #video = torch.sigmoid(video)
             video_enc = F.normalize(video, p=2, dim=-1)
         return video_enc
 
@@ -118,65 +121,96 @@ class TripleSyncnet(nn.Module):
     def compute_loss(self, audio_enc_a=None, param_enc_a=None, video_enc_a=None,
                      audio_enc_b=None, param_enc_b=None, video_enc_b=None):
 
-        loss = 0
+        total_loss = 0
         count = 0
+        loss_dict = {}
 
         if audio_enc_a is not None:
             if audio_enc_b is not None:
-                loss += self._compute_loss(audio_enc_a, audio_enc_b, is_same=False)
+                audio_audio_different = self._compute_loss(audio_enc_a, audio_enc_b, is_same=False)
+                total_loss += audio_audio_different
+                loss_dict['audio_audio_different'] = audio_audio_different.item()
                 count += 1
             if param_enc_b is not None:
-                loss += self._compute_loss(audio_enc_a, param_enc_b, is_same=False)
+                audio_param_different = self._compute_loss(audio_enc_a, param_enc_b, is_same=False)
+                total_loss += audio_param_different
+                loss_dict['audio_param_different'] = audio_param_different.item()
                 count += 1
             if video_enc_b is not None:
-                loss += self._compute_loss(audio_enc_a, video_enc_b, is_same=False)
+                audio_video_different = self._compute_loss(audio_enc_a, video_enc_b, is_same=False)
+                total_loss += audio_video_different
+                loss_dict['audio_video_different'] = audio_video_different.item()
                 count += 1
             if param_enc_a is not None:
-                loss += self._compute_loss(audio_enc_a, param_enc_a, is_same=True)
+                audio_param_same = self._compute_loss(audio_enc_a, param_enc_a, is_same=True)
+                total_loss += audio_param_same
+                loss_dict['audio_param_same'] = audio_param_same.item()
                 count += 1
             if video_enc_a is not None:
-                loss += self._compute_loss(audio_enc_a, video_enc_a, is_same=True)
+                audio_video_same = self._compute_loss(audio_enc_a, video_enc_a, is_same=True)
+                total_loss += audio_video_same
+                loss_dict['audio_video_same'] = audio_video_same.item()
                 count += 1
 
         if param_enc_a is not None:
             if audio_enc_b is not None:
-                loss += self._compute_loss(param_enc_a, audio_enc_b, is_same=False)
+                param_audio_different = self._compute_loss(param_enc_a, audio_enc_b, is_same=False)
+                total_loss += param_audio_different
+                loss_dict['param_audio_different'] = param_audio_different.item()
                 count += 1
             if param_enc_b is not None:
-                loss += self._compute_loss(param_enc_a, param_enc_b, is_same=False)
+                param_param_different = self._compute_loss(param_enc_a, param_enc_b, is_same=False)
+                total_loss += param_param_different
+                loss_dict['param_param_different'] = param_param_different.item()
                 count += 1
             if video_enc_b is not None:
-                loss += self._compute_loss(param_enc_a, video_enc_b, is_same=False)
+                param_video_different = self._compute_loss(param_enc_a, video_enc_b, is_same=False)
+                total_loss += param_video_different
+                loss_dict['param_video_different'] = param_video_different.item()
                 count += 1
             if video_enc_a is not None:
-                loss += self._compute_loss(param_enc_a, video_enc_a, is_same=True)
+                param_video_same = self._compute_loss(param_enc_a, video_enc_a, is_same=True)
+                total_loss += param_video_same
+                loss_dict['param_video_same'] = param_video_same.item()
                 count += 1
 
         if video_enc_a is not None:
             if audio_enc_b is not None:
-                loss += self._compute_loss(video_enc_a, audio_enc_b, is_same=False)
+                video_audio_different = self._compute_loss(video_enc_a, audio_enc_b, is_same=False)
+                total_loss += video_audio_different
+                loss_dict['video_audio_different'] = video_audio_different.item()
                 count += 1
             if param_enc_b is not None:
-                loss += self._compute_loss(video_enc_a, param_enc_b, is_same=False)
+                video_param_different = self._compute_loss(video_enc_a, param_enc_b, is_same=False)
+                total_loss += video_param_different
+                loss_dict['video_param_different'] = video_param_different.item()
                 count += 1
             if video_enc_b is not None:
-                loss += self._compute_loss(video_enc_a, video_enc_b, is_same=False)
+                video_video_different = self._compute_loss(video_enc_a, video_enc_b, is_same=False)
+                total_loss += video_video_different
+                loss_dict['video_video_different'] = video_video_different.item()
                 count += 1
 
         if audio_enc_b is not None:
             if param_enc_b is not None:
-                loss += self._compute_loss(audio_enc_b, param_enc_b, is_same=True)
+                audio_param_same = self._compute_loss(audio_enc_b, param_enc_b, is_same=True)
+                total_loss += audio_param_same
+                loss_dict['audio_param_same'] = audio_param_same.item()
                 count += 1
             if video_enc_b is not None:
-                loss += self._compute_loss(audio_enc_b, video_enc_b, is_same=True)
+                audio_video_same = self._compute_loss(audio_enc_b, video_enc_b, is_same=True)
+                total_loss += audio_video_same
+                loss_dict['audio_video_same'] = audio_video_same.item()
                 count += 1
 
         if param_enc_b is not None:
             if video_enc_b is not None:
-                loss += self._compute_loss(param_enc_b, video_enc_b, is_same=True)
+                param_video_same = self._compute_loss(param_enc_b, video_enc_b, is_same=True)
+                total_loss += param_video_same
+                loss_dict['param_video_same'] = param_video_same.item()
                 count += 1
 
-        loss = loss / count
+        loss = total_loss / count
         return loss
 
 

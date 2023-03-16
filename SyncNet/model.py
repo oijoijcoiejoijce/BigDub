@@ -4,6 +4,7 @@ from pytorch_lightning import Trainer
 
 from networks.syncnet import TripleSyncnet
 from pytorch_lightning.loggers import WandbLogger
+import numpy as np
 
 import os
 os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
@@ -27,8 +28,15 @@ class SyncNet(pl.LightningModule):
             other_params = self.prepare_parameters(other_params)
 
             mel_enc, params_enc, vid_enc = self.net(audio, params, frames)
-            other_mel_enc, other_params_enc, other_vid_enc = self.net(other_audio, other_params, other_frames)
-            loss = self.net.compute_loss(mel_enc, params_enc, vid_enc, other_mel_enc, other_params_enc, other_vid_enc)
+            #other_mel_enc, other_params_enc, other_vid_enc = self.net(other_audio, other_params, other_frames)
+            #loss = self.net.compute_loss(mel_enc, params_enc, vid_enc, other_mel_enc, other_params_enc, other_vid_enc)
+            other_mel_enc, other_params_enc, other_vid_enc = self.net(other_audio, params=None,
+                                                                      video=None)
+
+            if np.random.rand() > 0.5:
+                loss = self.net.compute_loss(audio_enc_a=mel_enc, video_enc_a=vid_enc)
+            else:
+                loss = self.net.compute_loss(audio_enc_b=other_mel_enc, video_enc_a=vid_enc)
 
             self.log('train_loss', loss)
             return loss
@@ -42,8 +50,17 @@ class SyncNet(pl.LightningModule):
             other_params = self.prepare_parameters(other_params)
 
             mel_enc, params_enc, vid_enc = self.net(audio, params, frames)
-            other_mel_enc, other_params_enc, other_vid_enc = self.net(other_audio, other_params, other_frames)
-            loss = self.net.compute_loss(mel_enc, params_enc, vid_enc, other_mel_enc, other_params_enc, other_vid_enc)
+            #other_mel_enc, other_params_enc, other_vid_enc = self.net(other_audio, other_params, other_frames)
+            #loss = self.net.compute_loss(mel_enc, params_enc, vid_enc, other_mel_enc, other_params_enc, other_vid_enc)
+
+            other_mel_enc, other_params_enc, other_vid_enc = self.net(other_audio, params=None,
+                                                                      video=None)
+
+            if np.random.rand() > 0.5:
+                loss = self.net.compute_loss(audio_enc_a=mel_enc, video_enc_a=vid_enc)
+            else:
+                loss = self.net.compute_loss(audio_enc_b=other_mel_enc, video_enc_a=vid_enc)
+
             self.log('val_loss', loss, on_epoch=True, prog_bar=True)
 
         def configure_optimizers(self):

@@ -431,6 +431,7 @@ def main():
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', type=str, default='configs/Laptop.ini')
+    parser.add_argument('--load_checkpoint', type=str, default='')
     args = parser.parse_args()
 
     config_path = args.config
@@ -464,6 +465,10 @@ def main():
     )
     wandb_logger = WandbLogger(project='DubbingForExtras_NR')
     model = Audio2Expression(config, train_dataloader.dataset.ids, logger=wandb_logger)
+
+    if args.load_checkpoint:
+        model.load_from_checkpoint(args.load_checkpoint)
+
     trainer = pl.Trainer(gpus=1, max_epochs=100,
                          callbacks=[ModelSummary(max_depth=2)],
                          default_root_dir=checkpoint_path, num_sanity_val_steps=0)
