@@ -467,7 +467,7 @@ def main():
     model = Audio2Expression(config, train_dataloader.dataset.ids, logger=wandb_logger)
 
     if args.load_checkpoint:
-        model.load_from_checkpoint(args.load_checkpoint, config=config, ids=train_dataloader.dataset.ids,
+        model.load_from_checkpoint(args.load_checkpoint, config=config, IDs=train_dataloader.dataset.ids,
                                    logger=wandb_logger)
 
     trainer = pl.Trainer(gpus=1, max_epochs=100,
