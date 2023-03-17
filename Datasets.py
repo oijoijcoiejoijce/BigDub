@@ -143,6 +143,8 @@ class DubbingDataset(Dataset):
                 if DataTypes.MEL in self.data_types:
                     all_audio = np.load(os.path.join(vid_root, 'MEL.npy'), mmap_mode='r')
 
+                    # scale = all_audio.shape[-1] / length
+
                     start, end = (frame_idx * (80 / 30)) - 8, (frame_idx * (80 / 30)) + 8
                     mel_idxs = np.arange(start, end).clip(0, all_audio.shape[-1] - 1).astype('int64')
                     full_MEL = all_audio[..., mel_idxs]
@@ -226,7 +228,11 @@ class DubbingDataset(Dataset):
             Args:
                 specific_video (str): If not None, will only yield frames from this video # TODO: Implement this
         """
-        v_idx = np.random.randint(len(self.data))
+        v_idx = [os.path.basename(x) for x in self.data['v_path'].unique()].index(specific_video) if specific_video is not None else None
+
+        if v_idx is None:
+            v_idx = np.random.randint(len(self.data))
+
         vid_root = self.data['v_path'].iloc[v_idx]
         length = self.data['length'].iloc[v_idx]
 

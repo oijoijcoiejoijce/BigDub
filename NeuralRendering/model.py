@@ -38,7 +38,7 @@ def warp_image_tensor(tensor, tform, img_size):
     return tensor.reshape((*expand_dims, C, img_size, img_size))
 
 
-class Audio2Expression(pl.LightningModule):
+class NeuralRenderer(pl.LightningModule):
 
     def __init__(self, config, IDs, nc=16, T=5, logger=None):
         super().__init__()
@@ -464,7 +464,7 @@ def main():
         num_workers=n_val_workers
     )
     wandb_logger = WandbLogger(project='DubbingForExtras_NR')
-    model = Audio2Expression(config, train_dataloader.dataset.ids, logger=wandb_logger)
+    model = NeuralRenderer(config, train_dataloader.dataset.ids, logger=wandb_logger)
 
     trainer = pl.Trainer(gpus=1, max_epochs=100,
                          callbacks=[ModelSummary(max_depth=2)],

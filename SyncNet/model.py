@@ -4,7 +4,6 @@ from pytorch_lightning import Trainer
 
 from networks.syncnet import TripleSyncnet
 from pytorch_lightning.loggers import WandbLogger
-import numpy as np
 
 import os
 os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
@@ -28,15 +27,10 @@ class SyncNet(pl.LightningModule):
             other_params = self.prepare_parameters(other_params)
 
             mel_enc, params_enc, vid_enc = self.net(audio, params, frames)
-            #other_mel_enc, other_params_enc, other_vid_enc = self.net(other_audio, other_params, other_frames)
+            other_mel_enc, other_params_enc, other_vid_enc = self.net(other_audio, other_params, other_frames)
             #loss = self.net.compute_loss(mel_enc, params_enc, vid_enc, other_mel_enc, other_params_enc, other_vid_enc)
-            other_mel_enc, other_params_enc, other_vid_enc = self.net(other_audio, params=None,
-                                                                      video=None)
 
-            if np.random.rand() > 0.5:
-                loss = self.net.compute_loss(audio_enc_a=mel_enc, video_enc_a=vid_enc)
-            else:
-                loss = self.net.compute_loss(audio_enc_b=other_mel_enc, video_enc_a=vid_enc)
+            loss = self.net.compute_loss(mel_enc, params_enc, vid_enc, other_mel_enc, other_params_enc, other_vid_enc)
 
             self.log('train_loss', loss)
             return loss
@@ -50,17 +44,8 @@ class SyncNet(pl.LightningModule):
             other_params = self.prepare_parameters(other_params)
 
             mel_enc, params_enc, vid_enc = self.net(audio, params, frames)
-            #other_mel_enc, other_params_enc, other_vid_enc = self.net(other_audio, other_params, other_frames)
-            #loss = self.net.compute_loss(mel_enc, params_enc, vid_enc, other_mel_enc, other_params_enc, other_vid_enc)
-
-            other_mel_enc, other_params_enc, other_vid_enc = self.net(other_audio, params=None,
-                                                                      video=None)
-
-            if np.random.rand() > 0.5:
-                loss = self.net.compute_loss(audio_enc_a=mel_enc, video_enc_a=vid_enc)
-            else:
-                loss = self.net.compute_loss(audio_enc_b=other_mel_enc, video_enc_a=vid_enc)
-
+            other_mel_enc, other_params_enc, other_vid_enc = self.net(other_audio, other_params, other_frames)
+            loss = self.net.compute_loss(mel_enc, params_enc, vid_enc, other_mel_enc, other_params_enc, other_vid_enc)
             self.log('val_loss', loss, on_epoch=True, prog_bar=True)
 
         def configure_optimizers(self):
@@ -87,7 +72,7 @@ def main():
             data_types=[DataTypes.MEL, DataTypes.Params, DataTypes.Frames], T=5, syncet=True),
         batch_size=batch_size,
         shuffle=True,
-        num_workers=2,
+        num_workers=0,
         pin_memory=True
     )
 
@@ -97,11 +82,11 @@ def main():
                        syncet=True),
         batch_size=batch_size,
         shuffle=True,
-        num_workers=0
+        num_workers=0,
     )
     wandb_logger = WandbLogger(project='DubbingForExtras_Syncnet')
     model = SyncNet()
-    trainer = pl.Trainer(gpus=1, max_epochs=100,
+    trainer = pl.Trainer(gpus=1, max_epochs=400,
                          callbacks=[ModelSummary(max_depth=2)],
                          default_root_dir="C:/Users/jacks/Documents/Data/DubbingForExtras/checkpoints/sync/basic",
                          logger=wandb_logger, gradient_clip_val=1.0, accumulate_grad_batches=grad_acc)
