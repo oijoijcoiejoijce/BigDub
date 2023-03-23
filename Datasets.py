@@ -84,6 +84,11 @@ class DubbingDataset(Dataset):
         return torch.cat(frames)
 
     def get_video_window(self, idxs, video_path):
+
+        if not os.path.exists(video_path):
+            print(f'Video {video_path} does not exist! Skipping...')
+            return None
+
         frames = []
         cap = cv2.VideoCapture(video_path)
         for idx in idxs:
