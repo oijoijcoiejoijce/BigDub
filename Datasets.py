@@ -113,14 +113,14 @@ class DubbingDataset(Dataset):
                 if self.fix_video is None:
                     v_idx = np.random.randint(len(self.data))
                     vid_root = self.data['v_path'].iloc[v_idx]
-                    vid_root = os.path.join(self.data_root, vid_root)
                 else:
                     vid_root = self.fix_video
                     for i in range(len(self.data['v_path'])):
                         if self.data['v_path'].iloc[i].replace('\\', '/') == vid_root.replace('\\', '/'):
                             v_idx = i
                             break
-
+                print(self.data_root, vid_root, os.path.join(self.data_root, vid_root))
+                vid_root = os.path.join(self.data_root, vid_root)
                 length = self.data['length'].iloc[v_idx]
                 if length <= 3 * self.T:
                     continue
@@ -309,18 +309,3 @@ class DubbingDataset(Dataset):
             # Return the dict
             return ret
         return generator, length
-
-if __name__ == '__main__':
-
-    dataset = DubbingDataset(
-        'C:/Users/jacks/Documents/Data/DubbingForExtras/v3/',
-        data_types=[DataTypes.Frames, DataTypes.MEL, DataTypes.Params])
-
-    gen, n_frames = dataset.get_video_generator()
-    import cv2
-
-    for i in range(n_frames):
-        frames = gen(i)['frames']
-        cv2.imshow('Frame', frames[0].permute((1, 2, 0)).detach().cpu().numpy())
-        cv2.waitKey(1)
-
