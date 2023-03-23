@@ -228,6 +228,20 @@ class FLAME(nn.Module):
                 vertices: N X V X 3
                 landmarks: N X number of landmarks X 3
         """
+        if shape_params is None:
+            if expression_params is None and pose_params is None and eye_pose_params is None:
+                raise ValueError('At least one of the parameters must be provided')
+            if expression_params is not None:
+                batch_size = expression_params.shape[0]
+                device = expression_params.device
+            elif pose_params is not None:
+                batch_size = pose_params.shape[0]
+                device = pose_params.device
+            elif eye_pose_params is not None:
+                batch_size = eye_pose_params.shape[0]
+                device = eye_pose_params.device
+            shape_params = torch.zeros(batch_size, self.cfg.n_shape).to(device)
+
         batch_size = shape_params.shape[0]
         if pose_params is None:
             pose_params = self.eye_pose.expand(batch_size, -1)

@@ -21,7 +21,8 @@ class DataTypes(Enum):
 
 
 class DubbingDataset(Dataset):
-    def __init__(self, data_root, data_types, T=5, syncet=True, split='train', fix_video=None):
+    def __init__(self, data_root, data_types, T=5, syncet=True, split='train',
+                 fix_video=None, fix_ID=None, restrict_videos=None):
         super(DubbingDataset, self).__init__()
         self.data_root = data_root
 
@@ -31,19 +32,25 @@ class DubbingDataset(Dataset):
         self.syncet = syncet
         self.data_types = data_types
 
-        # Add the path to the index
-        for i in range(len(self.data)):
-            path = self.data.loc[i, 'v_path']
-            if path[0] == '/':
-                path = path[1:]
-            self.data.loc[i, 'v_path'] = os.path.join(self.data_root, path)
-
+        # Get the unique IDs
+        self.ids = np.unique(np.array(self.data['face_ID']))
+        self.n_ids = self.ids.shape[0]
 
         if split != 'all':
             self.data = self.data[self.data['split'] == split]
 
-        self.ids = np.unique(np.array(self.data['face_ID']))
-        self.n_ids = self.ids.shape[0]
+        if fix_ID is not None:
+            self.data = self.data[self.data['face_ID'] == fix_ID]
+
+        if restrict_videos is not None:
+            self.data = self.data[self.data['v_path'].isin(restrict_videos)]
+
+        # Add the path to the index
+        """for i in range(len(self.data)):
+            path = self.data.loc[i, 'v_path']
+            if path[0] == '/':
+                path = path[1:]
+            self.data.loc[i, 'v_path'] = os.path.join(self.data_root, path)"""
 
         #self.len = self.data['length'].sum()
         self.len = len(self.data)  # This way makes validation per epoch work better using lightning
@@ -101,6 +108,7 @@ class DubbingDataset(Dataset):
                 if self.fix_video is None:
                     v_idx = np.random.randint(len(self.data))
                     vid_root = self.data['v_path'].iloc[v_idx]
+                    vid_root = os.path.join(self.data_root, vid_root)
                 else:
                     vid_root = self.fix_video
                     for i in range(len(self.data['v_path'])):
@@ -234,6 +242,7 @@ class DubbingDataset(Dataset):
             v_idx = np.random.randint(len(self.data))
 
         vid_root = self.data['v_path'].iloc[v_idx]
+        vid_root = os.path.join(self.data_root, vid_root)
         length = self.data['length'].iloc[v_idx]
 
         valid_frames = list(range(self.T, length - self.T))

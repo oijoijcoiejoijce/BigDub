@@ -6,7 +6,13 @@ import mediapipe as mp
 import numpy as np
 
 from networks import DownBlock, AudioEncoder
+import trimesh
 
+from EMOCA_lite.DecaFLAME import FLAME, FLAMETex
+from EMOCA_lite.Renderer import ComaMeshRenderer
+
+import os
+from omegaconf import OmegaConf
 
 class Conv2d(nn.Module):
     def __init__(self, cin, cout, kernel_size, stride, padding, residual=False, *args, **kwargs):
@@ -24,10 +30,49 @@ class Conv2d(nn.Module):
             out += x
         return self.act(out)
 
+class ParamsToImage(nn.Module):
+
+    def __init__(self, config):
+        super().__init__()
+
+        emoca_checkpoint = config.get("Paths", "emoca_checkpoint")
+        emoca_config = config.get("Paths", "emoca_config")
+        flame_assets = config.get("Paths", "flame_assets")
+
+        with open(emoca_config, "r") as f:
+            conf = OmegaConf.load(f)
+        conf = conf.detail
+
+        model_cfg = conf.model
+        model_cfg.mode = "coarse"
+        model_cfg.resume_training = False
+
+        for k in ["topology_path", "fixed_displacement_path", "flame_model_path", "flame_lmk_embedding_path",
+                  "flame_mediapipe_lmk_embedding_path", "face_mask_path", "face_eye_mask_path", "tex_path"]:
+            model_cfg[k] = os.path.join(flame_assets, os.path.basename(model_cfg[k]))
+
+        # Use just the lower half of the face mask
+        model_cfg["face_eye_mask_path"] = model_cfg["face_eye_mask_path"].replace("uv_face_eye_mask", "uv_dub_mask")
+        model_cfg["face_mask_path"] = model_cfg["face_mask_path"].replace("uv_face_mask", "uv_dub_mask")
+
+        # self.device = config.device
+        self.shape_model = FLAME(model_cfg)
+        self.mesh = trimesh.load(model_cfg.topology_path, process=False, maintain_order=True)
+        self.faces = torch.from_numpy(self.mesh.faces)[None]
+        self.renderer = ComaMeshRenderer('smooth', 'cuda')
+
+    def forward(self, exp, jaw):
+
+        pose = torch.cat([torch.zeros((jaw.shape[0], 3), device=exp.device), jaw], dim=-1)
+        verts, *_ = self.shape_model(expression_params=exp, pose_params=pose)
+        images = self.renderer.render((verts, self.faces.to(exp.device).repeat(verts.shape[0], 1, 1)))
+        return images
+
+
 class TripleSyncnet(nn.Module):
     """SyncNet with 3 inputs: audio, video, and parameters.
    """
-    def __init__(self, n_params, T=5):
+    def __init__(self, config, n_params=53, T=5):
 
         super(TripleSyncnet, self).__init__()
         self.audio_enc = AudioEncoder()
@@ -46,28 +91,32 @@ class TripleSyncnet(nn.Module):
         )
 
         self.video_resize = Resize((48, 96))
-        self.video_enc_conv = nn.ModuleList([
-            nn.Conv2d(3 * T, 64, kernel_size=3, stride=1, padding=1),
-            nn.LeakyReLU(),
-
-            DownBlock(64, 64),   # (B, 64, 64, 64)
-            DownBlock(64, 64),  # (B, 256, 32, 32)
-            DownBlock(64, 128),  # (B, 256, 16, 16)
-            DownBlock(128, 128),  # (B, 256, 8, 8)
-            nn.Conv2d(128, 128, kernel_size=3, stride=1, padding=1)
-            ]
-        )
-        self.video_enc_fc = nn.ModuleList([
-            nn.Linear(128 * 8 * 8, 256),
-            nn.LeakyReLU(),
-
-            nn.Linear(256, 256),
-            nn.LeakyReLU(),
-
-            nn.Linear(256, 512)
-        ])
 
         self.face_encoder = nn.ModuleList([
+            Conv2d(15, 32, kernel_size=(7, 7), stride=1, padding=3),
+
+            Conv2d(32, 64, kernel_size=5, stride=(1, 2), padding=1),
+            Conv2d(64, 64, kernel_size=3, stride=1, padding=1, residual=True),
+            Conv2d(64, 64, kernel_size=3, stride=1, padding=1, residual=True),
+
+            Conv2d(64, 128, kernel_size=3, stride=2, padding=1),
+            Conv2d(128, 128, kernel_size=3, stride=1, padding=1, residual=True),
+            Conv2d(128, 128, kernel_size=3, stride=1, padding=1, residual=True),
+            Conv2d(128, 128, kernel_size=3, stride=1, padding=1, residual=True),
+
+            Conv2d(128, 256, kernel_size=3, stride=2, padding=1),
+            Conv2d(256, 256, kernel_size=3, stride=1, padding=1, residual=True),
+            Conv2d(256, 256, kernel_size=3, stride=1, padding=1, residual=True),
+
+            Conv2d(256, 512, kernel_size=3, stride=2, padding=1),
+            Conv2d(512, 512, kernel_size=3, stride=1, padding=1, residual=True),
+            Conv2d(512, 512, kernel_size=3, stride=1, padding=1, residual=True),
+
+            Conv2d(512, 512, kernel_size=3, stride=2, padding=1),
+            Conv2d(512, 512, kernel_size=3, stride=1, padding=0),
+            Conv2d(512, 512, kernel_size=1, stride=1, padding=0)])
+
+        self.render_encoder = nn.ModuleList([
             Conv2d(15, 32, kernel_size=(7, 7), stride=1, padding=3),
 
             Conv2d(32, 64, kernel_size=5, stride=(1, 2), padding=1),
@@ -94,7 +143,11 @@ class TripleSyncnet(nn.Module):
         self.crit = nn.BCELoss()
         self.triplet = nn.TripletMarginLoss(margin=0.2)
         self.det = mp.solutions.face_mesh.FaceMesh(max_num_faces=1, static_image_mode=True, refine_landmarks=False)
-        self.lmk_idxs = [212, 432, 18, 164]
+        self.lmk_idxs = [207, 427, 2]
+
+        self.renderer = ParamsToImage(config)
+        self.render_crops = {}
+        self.video_crops = {}
 
     def get_mouth_bb(self, frame):
 
@@ -107,9 +160,12 @@ class TripleSyncnet(nn.Module):
         lmks = lmks.landmark
         lmks = [[int(lmk.x * frame.shape[2]), int(lmk.y * frame.shape[1])] for lmk in lmks]
         lmks = [lmks[idx] for idx in self.lmk_idxs]
-        bb = [min([lmk[0] for lmk in lmks]), min([lmk[1] for lmk in lmks]), max([lmk[0] for lmk in lmks]),
-              max([lmk[1] for lmk in lmks])]
+        x0 = min([lmk[0] for lmk in lmks])
+        x1 = max([lmk[0] for lmk in lmks])
+        y0 = min([lmk[1] for lmk in lmks])
+        y1 = y0 + (x1 - x0)
 
+        bb = [x0, y0, x1, y1]
         return bb
 
     def crop_video_to_mouth(self, video):
@@ -128,31 +184,48 @@ class TripleSyncnet(nn.Module):
         crops = crops.reshape((B, T, C, crops.shape[-2], crops.shape[-1]))
         return crops
 
-    def audio_forward(self, audio):
+    def audio_forward(self, audio, name='a'):
         audio_enc = None
         if audio is not None:
             audio_enc = self.audio_enc(audio[:, None, :, :])
             audio_enc = audio_enc.reshape((audio_enc.shape[0], -1))
-            #audio_enc = F.relu(audio_enc)
-            audio_enc = torch.sigmoid(audio_enc)
+            audio_enc = F.relu(audio_enc)
+
+            # audio_enc = torch.sigmoid(audio_enc)
             audio_enc = F.normalize(audio_enc, p=2, dim=-1)
         return audio_enc
 
-    def param_forward(self, params):
+    def param_forward(self, params, name='a'):
         param_enc = None
         if params is not None:
-            params = params.reshape((params.shape[0], -1))
-            param_enc = self.param_enc(params)
-            #param_enc = F.relu(param_enc)
-            param_enc = torch.sigmoid(param_enc)
+            B, T, *_ = params.shape
+            params = params.reshape((-1, params.shape[-1]))
+
+            exp, pose = params[:, :50], params[:, 50:]
+            render = self.renderer(exp, pose)[..., :3]
+
+            render_crop = self.crop_video_to_mouth(render.permute((0, 3, 1, 2)).reshape((B, T, 3, 512, 512)))
+            self.render_crops[name] = render_crop
+
+            x = render_crop.reshape((B, T*3, *render_crop.shape[-2:]))
+
+            for layer in self.render_encoder:
+                x = layer(x)
+
+            x = x.reshape((x.shape[0], -1))
+
+            #param_enc = self.param_enc(params)
+            param_enc = F.relu(x)
+            #param_enc = torch.sigmoid(x)
             param_enc = F.normalize(param_enc, p=2, dim=-1)
         return param_enc
 
-    def video_forward(self, video):
+    def video_forward(self, video, name='a'):
         video_enc = None
         if video is not None:
 
             video = self.crop_video_to_mouth(video)
+            self.video_crops[name] = video
 
             # Reshape and resize the video to have 128, 128
             B, T, C, W, H = video.shape
@@ -174,19 +247,19 @@ class TripleSyncnet(nn.Module):
 
             video_enc = video
 
-            #video = F.relu(video)
-            video = torch.sigmoid(video)
+            video = F.relu(video)
+            #video = torch.sigmoid(video)
             video_enc = F.normalize(video, p=2, dim=-1)
         return video_enc
 
 
     # @profile
-    def forward(self, audio=None, params=None, video=None):
+    def forward(self, audio=None, params=None, video=None, name='a'):
         # Audio = (B, 80, 16), params = (B, T, C), video = (B, T, 3, 256, 256)
 
-        audio_enc = self.audio_forward(audio)
-        param_enc = self.param_forward(params)
-        video_enc = self.video_forward(video)
+        audio_enc = self.audio_forward(audio, name=name)
+        param_enc = self.param_forward(params, name=name)
+        video_enc = self.video_forward(video, name=name)
 
         return audio_enc, param_enc, video_enc
 

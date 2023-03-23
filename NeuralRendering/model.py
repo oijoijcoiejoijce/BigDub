@@ -13,7 +13,7 @@ from networks import UnetAdaIN
 from networks.UNET import UnetRenderer
 from networks.networks import define_D
 from networks.VGG import VGGLOSS
-from networks import Discriminator
+from networks import Discriminator, AudioEncoder
 from EMOCA_lite.model import DecaModule
 from pytorch_lightning.loggers import WandbLogger
 from skimage.transform import warp
@@ -46,6 +46,7 @@ class NeuralRenderer(pl.LightningModule):
         self.automatic_optimization = False
 
         self.config = config
+        self.use_audio = config.getboolean("Model", "use_audio")
         self.wandb_logger = logger
         self.nc = nc
         self.T = T
@@ -81,6 +82,7 @@ class NeuralRenderer(pl.LightningModule):
         self.prepare_textures(IDs, n_channels=nc)
         # self.unet = UnetAdaIN(3, 3).to(self.device)
         self.unet = UnetRenderer('UNET_8_level_ADAIN', nc, 3, norm_layer=nn.InstanceNorm2d)
+        self.audio_enc = AudioEncoder()
         self.discriminator = define_D(3*T, 64, 'basic', norm='instance', init_type='normal')
         self.vgg = VGGLOSS().to(self.device)
 
@@ -148,7 +150,12 @@ class NeuralRenderer(pl.LightningModule):
         network_input = self.prepare_network_input(frames, uv, inner_mask, outer_mask, IDs)
 
         # TODO: Condition on audio
-        cond = torch.ones((B * T, 512), device=self.device)
+        if self.use_audio:
+            audio = batch['ind_MEL']
+            audio = audio[:, :,  None, :, :].reshape((B*T, 1, *audio.shape[2:]))
+            cond = self.audio_enc(audio).reshape((B * T, -1))
+        else:
+            cond = torch.ones((B * T, 512), device=self.device)
 
         network_input = self.resize(network_input.reshape((B * T, *network_input.shape[2:])))
         frames = self.resize(frames.reshape((B * T, *frames.shape[2:])))
@@ -161,7 +168,7 @@ class NeuralRenderer(pl.LightningModule):
         network_input = network_input.reshape((B, T, *network_input.shape[1:]))
 
         return network_output, frames, network_input
-    def train_generator(self, network_output, frames, network_input, opt_tex, opt_img):
+    def train_generator(self, network_output, frames, network_input, opt_tex, opt_img, opt_audio):
 
         B, T, C, H, W = frames.shape
 
@@ -178,6 +185,7 @@ class NeuralRenderer(pl.LightningModule):
         # loss = loss_img
         opt_tex.zero_grad()
         opt_img.zero_grad()
+        opt_audio.zero_grad()
 
         self.manual_backward(loss)
 
@@ -191,23 +199,25 @@ class NeuralRenderer(pl.LightningModule):
 
         opt_tex.step()
         opt_img.step()
+        opt_audio.step()
         return (loss_img + loss_tex + loss_vgg)  # Do not include adversarial loss for metrics
 
 
     def training_step(self, batch):
 
-        opt_tex, opt_img, opt_discriminator = self.optimizers()
-        scheduler_tex, scheduler_img, scheduler_discriminator = self.lr_schedulers()
+        opt_tex, opt_img, opt_discriminator, opt_audio = self.optimizers()
+        scheduler_tex, scheduler_img, scheduler_discriminator, scheduler_audio = self.lr_schedulers()
 
         network_output, frames, network_input = self.forward(batch)
 
         self.train_discriminator(frames, network_output, opt_discriminator)
 
-        loss = self.train_generator(network_output, frames, network_input, opt_tex, opt_img)
+        loss = self.train_generator(network_output, frames, network_input, opt_tex, opt_img, opt_audio)
         if self.current_epoch > 50:
             scheduler_tex.step()
             scheduler_img.step()
             scheduler_discriminator.step()
+            scheduler_audio.step()
 
         return loss
 
@@ -233,7 +243,12 @@ class NeuralRenderer(pl.LightningModule):
         network_input = self.prepare_network_input(frames, uv, inner_mask, outer_mask, IDs)
 
         # TODO: Condition on audio
-        cond = torch.ones((B*T, 512), device=self.device)
+        if self.use_audio:
+            audio = batch['ind_MEL']
+            audio = audio[:, :, None, :, :].reshape((B * T, 1, *audio.shape[2:]))
+            cond = self.audio_enc(audio).reshape((B * T, -1))
+        else:
+            cond = torch.ones((B * T, 512), device=self.device)
 
         # Resize
         network_input = self.resize(network_input.reshape((B*T, *network_input.shape[2:])))
@@ -300,7 +315,12 @@ class NeuralRenderer(pl.LightningModule):
                 network_input = self.prepare_network_input(frames, uv, inner_mask, outer_mask, IDs)
 
                 # TODO: Condition on audio
-                cond = torch.ones((B * T, 512), device=self.device)
+                if self.use_audio:
+                    audio = batch['ind_MEL']
+                    audio = audio[:, :, None, :, :].reshape((B * T, 1, *audio.shape[2:]))
+                    cond = self.audio_enc(audio).reshape((B * T, -1))
+                else:
+                    cond = torch.ones((B * T, 512), device=self.device)
 
                 # Resize
                 network_input = self.resize(network_input.reshape((B * T, *network_input.shape[2:])))
@@ -354,30 +374,31 @@ class NeuralRenderer(pl.LightningModule):
         tex_opt = torch.optim.Adam(self.textures.values(), lr=2e-3, betas=(0.5, 0.999))
         img_opt = torch.optim.Adam(self.unet.parameters(), lr=2e-4, betas=(0.5, 0.999))
         dis_opt = torch.optim.Adam(self.discriminator.parameters(), lr=2e-4, betas=(0.5, 0.999))
+        audio_opt = torch.optim.Adam(self.audio_enc.parameters(), lr=2e-4, betas=(0.5, 0.999))
 
         tex_scheduler = torch.optim.lr_scheduler.LinearLR(tex_opt, 1.0, 0.0, 100)
         img_scheduler = torch.optim.lr_scheduler.LinearLR(img_opt, 1.0, 0.0, 100)
         dis_scheduler = torch.optim.lr_scheduler.LinearLR(dis_opt, 1.0, 0.0, 100)
-        return [tex_opt, img_opt, dis_opt], [tex_scheduler, img_scheduler, dis_scheduler]
+        audio_scheduler = torch.optim.lr_scheduler.LinearLR(audio_opt, 1.0, 0.0, 100)
+        return [tex_opt, img_opt, dis_opt, audio_opt], [tex_scheduler, img_scheduler, dis_scheduler, audio_scheduler]
 
+    def finetune(self, dataloader, ID_name, n_epoch=1):
+        if ID_name in self.textures:
+            texture = self.textures[ID_name]
+        else:
+            return
 
-    def fit_to_new_ID(self, dataloader, n_epoch=10, ID_name=None):
-        """ Fit the model to a new ID, optimizing only the texture
-            This allows to train the model on a new ID without having to retrain the whole model
-        """
-        # Create a new neural texture
-        texture = torch.randn_like(self.textures[list(self.textures.keys())[0]])
+        # Optimizer takes texture only
+        optim = torch.optim.Adam(self.unet.parameters(), lr=1e-5)
 
-        # Optimzer takes texture only
-        optim = torch.optim.Adam([texture], lr=1e-3)
+        wandb.init(project="DubbingForExtras_NR_ft")
+        iters = 0
 
         for epoch in range(n_epoch):
             for batch in tqdm(dataloader):
 
-                optim.zero_grad()
-
                 # Prepare input
-                batch = self.dict_to_torch(batch)
+                batch = self.dict_to_torch(batch, expand_batch=True)
                 params, frames, uv, inner_mask, outer_mask = self.prepare_input(batch)
                 IDs = batch['ID']
 
@@ -403,7 +424,12 @@ class NeuralRenderer(pl.LightningModule):
                 frames = frames.reshape((B, T, *frames.shape[1:]))
 
                 # TODO: Condition on audio
-                cond = torch.ones((B * T, 512), device=self.device)
+                if self.use_audio:
+                    audio = batch['ind_MEL']
+                    audio = audio[:, :, None, :, :].reshape((B * T, 1, *audio.shape[2:]))
+                    cond = self.audio_enc(audio).reshape((B * T, -1))
+                else:
+                    cond = torch.ones((B * T, 512), device=self.device)
 
                 # Train network
                 network_output = self.unet(network_input, cond)
@@ -412,14 +438,100 @@ class NeuralRenderer(pl.LightningModule):
 
                 loss_tex = (network_input[:, :, :3] - frames).abs().mean()
                 loss_img = (network_output - frames).abs().mean()
-                loss = loss_tex + loss_img
+                loss_vgg = self.vgg(network_output.reshape((B * T, *network_output.shape[2:])),
+                                    frames.reshape((B * T, *frames.shape[2:])))
+                loss = loss_tex + loss_img + loss_vgg
                 # loss = loss_img
-                self.manual_backward(loss)
 
+                optim.zero_grad()
+                loss.backward()
                 optim.step()
 
+                iters += 1
+                if iters > 1000:
+                    break
+
                 wandb.log({'finetune/loss': loss, 'finetune/loss_tex': loss_tex,
-                           'finetune/loss_img': loss_img}, step=self.trainer.global_step)
+                           'finetune/loss_img': loss_img})
+
+
+    def fit_to_new_ID(self, dataloader, n_epoch=1, ID_name=None):
+        """ Fit the model to a new ID, optimizing only the texture
+            This allows to train the model on a new ID without having to retrain the whole model
+        """
+        # Create a new neural texture
+        texture = torch.randn_like(self.textures[list(self.textures.keys())[0]])
+
+        # If the ID already exists, use the texture of the ID
+        if ID_name is not None:
+            if ID_name in self.textures:
+                texture = self.textures[ID_name]
+
+        # Optimizer takes texture only
+        optim = torch.optim.Adam([texture], lr=1e-3)
+
+        wandb.init(project="DubbingForExtras_NR_ft")
+        iters = 0
+
+        for epoch in range(n_epoch):
+            for batch in tqdm(dataloader):
+
+                # Prepare input
+                batch = self.dict_to_torch(batch, expand_batch=True)
+                params, frames, uv, inner_mask, outer_mask = self.prepare_input(batch)
+                IDs = batch['ID']
+
+                # Prepare network input
+                B, T, C, H, W = frames.shape
+
+                # Prepare textures
+                textures = torch.cat([texture for ID in IDs], dim=0)[:, None].repeat(1, T, 1, 1, 1)
+
+                # Sample texture
+                raster = F.grid_sample(textures.reshape((B * T, *textures.shape[2:])),
+                                       uv.reshape((B * T, *uv.shape[2:])),
+                                       align_corners=False, padding_mode='zeros')
+                raster = raster.reshape((B, T, *raster.shape[1:]))
+
+                frames_pad = torch.cat((frames, torch.zeros(B, T, self.nc - 3, H, W, device=self.device)), dim=2)
+
+                # Mask texture
+                network_input = raster * inner_mask + (frames_pad * (1 - outer_mask))
+
+                network_input = self.resize(network_input.reshape((B * T, *network_input.shape[2:])))
+                frames = self.resize(frames.reshape((B * T, *frames.shape[2:])))
+                frames = frames.reshape((B, T, *frames.shape[1:]))
+
+                # TODO: Condition on audio
+                if self.use_audio:
+                    audio = batch['ind_MEL']
+                    audio = audio[:, :, None, :, :].reshape((B * T, 1, *audio.shape[2:]))
+                    cond = self.audio_enc(audio).reshape((B * T, -1))
+                else:
+                    cond = torch.ones((B * T, 512), device=self.device)
+
+                # Train network
+                network_output = self.unet(network_input, cond)
+                network_output = network_output.reshape((B, T, *network_output.shape[1:]))
+                network_input = network_input.reshape((B, T, *network_input.shape[1:]))
+
+                loss_tex = (network_input[:, :, :3] - frames).abs().mean()
+                loss_img = (network_output - frames).abs().mean()
+                loss_vgg = self.vgg(network_output.reshape((B * T, *network_output.shape[2:])),
+                                    frames.reshape((B * T, *frames.shape[2:])))
+                loss = loss_tex + loss_img + loss_vgg
+                # loss = loss_img
+
+                optim.zero_grad()
+                loss.backward()
+                optim.step()
+
+                iters += 1
+                if iters > 1000:
+                    break
+
+                wandb.log({'finetune/loss': loss, 'finetune/loss_tex': loss_tex,
+                           'finetune/loss_img': loss_img})
 
         self.textures[ID_name] = texture
 
@@ -474,6 +586,7 @@ def main():
         trainer.fit(model, train_dataloader, val_dataloader, ckpt_path=args.load_checkpoint)
     else:
         trainer.fit(model, train_dataloader, val_dataloader)
+
 
 if __name__ == '__main__':
     main()

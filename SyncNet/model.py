@@ -10,9 +10,9 @@ os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
 
 class SyncNet(pl.LightningModule):
 
-        def __init__(self):
+        def __init__(self, config):
             super().__init__()
-            self.net = TripleSyncnet(53)
+            self.net = TripleSyncnet(config, 53)
 
         def prepare_parameters(self, params):
             exp, jaw = params['expcode'], params['posecode'][..., 3:]
@@ -26,8 +26,8 @@ class SyncNet(pl.LightningModule):
             params = self.prepare_parameters(params)
             other_params = self.prepare_parameters(other_params)
 
-            mel_enc, params_enc, vid_enc = self.net(audio, params, frames)
-            other_mel_enc, other_params_enc, other_vid_enc = self.net(other_audio, other_params, other_frames)
+            mel_enc, params_enc, vid_enc = self.net(audio, params, frames, name='a')
+            other_mel_enc, other_params_enc, other_vid_enc = self.net(other_audio, other_params, other_frames, name='b')
             #loss = self.net.compute_loss(mel_enc, params_enc, vid_enc, other_mel_enc, other_params_enc, other_vid_enc)
 
             loss = self.net.compute_loss(mel_enc, params_enc, vid_enc, other_mel_enc, other_params_enc, other_vid_enc)
@@ -43,13 +43,13 @@ class SyncNet(pl.LightningModule):
             params = self.prepare_parameters(params)
             other_params = self.prepare_parameters(other_params)
 
-            mel_enc, params_enc, vid_enc = self.net(audio, params, frames)
-            other_mel_enc, other_params_enc, other_vid_enc = self.net(other_audio, other_params, other_frames)
+            mel_enc, params_enc, vid_enc = self.net(audio, params, frames, name='a')
+            other_mel_enc, other_params_enc, other_vid_enc = self.net(other_audio, other_params, other_frames, name='b')
             loss = self.net.compute_loss(mel_enc, params_enc, vid_enc, other_mel_enc, other_params_enc, other_vid_enc)
             self.log('val_loss', loss, on_epoch=True, prog_bar=True)
 
         def configure_optimizers(self):
-            return torch.optim.Adam(self.net.parameters(), lr=1e-4)
+            return torch.optim.Adam(self.net.parameters(), lr=1e-3)
 
 def main():
     from Datasets import DubbingDataset, DataTypes
@@ -85,7 +85,7 @@ def main():
         num_workers=0,
     )
     wandb_logger = WandbLogger(project='DubbingForExtras_Syncnet')
-    model = SyncNet()
+    model = SyncNet(config)
     trainer = pl.Trainer(gpus=1, max_epochs=400,
                          callbacks=[ModelSummary(max_depth=2)],
                          default_root_dir="C:/Users/jacks/Documents/Data/DubbingForExtras/checkpoints/sync/basic",

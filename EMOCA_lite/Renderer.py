@@ -72,10 +72,13 @@ class RendererWrapper(object):
 
 class ComaMeshRenderer(RendererWrapper):
 
-    def __init__(self, renderer_type, device, image_size=512, num_views=3, scale=6):
+    def __init__(self, renderer_type, device, image_size=512, num_views=1, scale=6):
         # Initialize an OpenGL perspective camera.
         # elev = torch.linspace(0, 180, batch_size)
-        azim = torch.linspace(-90, 90, num_views)
+        if num_views == 1:
+            azim = torch.tensor([0])
+        else:
+            azim = torch.linspace(-90, 90, num_views)
         self.scale = scale
 
         R, T = look_at_view_transform(0.35, elev=0, azim=azim,
@@ -137,7 +140,10 @@ class ComaMeshRenderer(RendererWrapper):
         mesh = Meshes(verts, faces, textures)
         mesh = mesh.to(self.device)
 
-        meshes = mesh.extend(self.batch_size)
+        if self.batch_size > 1:
+            meshes = mesh.extend(self.batch_size)
+        else:
+            meshes = mesh
         images = self.renderer(meshes, materials=self.materials)
         return images
 
