@@ -119,7 +119,7 @@ class DubbingDataset(Dataset):
                         if self.data['v_path'].iloc[i].replace('\\', '/') == vid_root.replace('\\', '/'):
                             v_idx = i
                             break
-                print(self.data_root, vid_root, os.path.join(self.data_root, vid_root))
+                # print(self.data_root, vid_root, os.path.join(self.data_root, vid_root))
                 vid_root = os.path.join(self.data_root, vid_root)
                 length = self.data['length'].iloc[v_idx]
                 if length <= 3 * self.T:

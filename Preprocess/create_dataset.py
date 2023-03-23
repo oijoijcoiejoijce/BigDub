@@ -30,7 +30,10 @@ def main(data_root):
         if not os.path.exists(os.path.join(video, 'params.npz')):
             continue
 
-        vid_names.append(video.replace(data_root, ''))
+        vid_name = video.replace(data_root, '')
+        if vid_name[0] == '/':
+            vid_name = vid_name[1:]
+        vid_names.append(vid_name)
         cap = cv2.VideoCapture(os.path.join(video, 'video.mp4'))
 
         f_len = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
