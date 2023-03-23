@@ -1,5 +1,8 @@
 import sys
 from pathlib import Path
+
+import cv2
+
 sys.path.append(str(Path(__file__).parent.parent))
 
 import pytorch_lightning as pl
@@ -82,8 +85,11 @@ class NeuralRenderer(pl.LightningModule):
         self.prepare_textures(IDs, n_channels=nc)
         # self.unet = UnetAdaIN(3, 3).to(self.device)
         self.unet = UnetRenderer('UNET_8_level_ADAIN', nc, 3, norm_layer=nn.InstanceNorm2d)
-        self.audio_enc = AudioEncoder()
-        self.discriminator = define_D(3*T, 64, 'basic', norm='instance', init_type='normal')
+
+        if self.use_audio:
+            self.audio_enc = AudioEncoder()
+
+        self.discriminator = define_D(3*T, 256, 'basic', n_layers_D=5, norm='instance', init_type='normal')
         self.vgg = VGGLOSS().to(self.device)
 
         self.resize = Resize(config.getint("Model", "image_size"))
@@ -141,7 +147,7 @@ class NeuralRenderer(pl.LightningModule):
 
     def forward(self, batch):
         # Get data
-        params, frames, uv, inner_mask, outer_mask = self.prepare_input(batch)
+        params, frames, uv, inner_mask, outer_mask, mouth_mask = self.prepare_input(batch)
         IDs = batch['ID']
 
         B, T, C, H, W = frames.shape
@@ -234,7 +240,7 @@ class NeuralRenderer(pl.LightningModule):
     def validation_step(self, batch, *args):
 
         # Get data
-        params, frames, uv, inner_mask, outer_mask = self.prepare_input(batch)
+        params, frames, uv, inner_mask, outer_mask, mouth_mask = self.prepare_input(batch)
         IDs = batch['ID']
 
         B, T, C, H, W = frames.shape
@@ -305,7 +311,7 @@ class NeuralRenderer(pl.LightningModule):
 
                 batch = self.dict_to_torch(batch, expand_batch=True)
 
-                params, frames, uv, inner_mask, outer_mask = self.prepare_input(batch)
+                params, frames, uv, inner_mask, outer_mask, mouth_mask = self.prepare_input(batch)
                 IDs = batch['ID']
                 # Prepare textures
 
@@ -319,6 +325,7 @@ class NeuralRenderer(pl.LightningModule):
                     audio = batch['ind_MEL']
                     audio = audio[:, :, None, :, :].reshape((B * T, 1, *audio.shape[2:]))
                     cond = self.audio_enc(audio).reshape((B * T, -1))
+                    print(cond.mean(), cond.std())
                 else:
                     cond = torch.ones((B * T, 512), device=self.device)
 
@@ -331,12 +338,33 @@ class NeuralRenderer(pl.LightningModule):
                 network_output = self.unet(network_input, cond)
                 network_output = network_output.reshape((B, T, *network_output.shape[1:]))
 
-                vid_frame = torch.cat([frames[0, network_output.shape[1] // 2],
-                                       network_output[0, network_output.shape[1] // 2]],
-                                      dim=2).cpu().detach().numpy()
+                #vid_frame = torch.cat([frames[0, network_output.shape[1] // 2],
+                #                       network_output[0, network_output.shape[1] // 2]],
+                #                      dim=2).cpu().detach().numpy()
+
+                np_frame = (frames[0, network_output.shape[1] // 2].permute((1, 2, 0)).cpu().detach().numpy() * 255).astype(np.uint8)
+                np_output = (network_output[0, network_output.shape[1] // 2].permute((1, 2, 0)).cpu().detach().numpy().clip(0, 1) * 255).astype(np.uint8)
+                np_outer_mask = (outer_mask[0, network_output.shape[1] // 2].permute((1, 2, 0)).cpu().detach().numpy() * 255).astype(np.uint8)
+                np_outer_mask = cv2.resize(np_outer_mask, (np_output.shape[1], np_output.shape[0]))
+
+                np_inner_mask = (inner_mask[0, network_output.shape[1] // 2].permute((1, 2, 0)).cpu().detach().numpy() * 255).astype(np.uint8)
+                np_inner_mask = cv2.resize(np_inner_mask, (np_output.shape[1], np_output.shape[0]))
+
+                np_mouth_mask = (mouth_mask[0, network_output.shape[1] // 2].permute(
+                    (1, 2, 0)).cpu().detach().numpy() * 255).astype(np.uint8)
+                np_mouth_mask = cv2.resize(np_mouth_mask, (np_output.shape[1], np_output.shape[0]))
+
+                np_difference_mask = np.logical_xor(np_mouth_mask==0, np_outer_mask==0).astype(np.uint8) * 255
+                np_clone = np_frame.copy()
+                np_clone[np_mouth_mask > 0] = np_output[np_mouth_mask > 0]
+
+                # blended = cv2.seamlessClone(np_output, np_clone, np_difference_mask, (np_output.shape[1] // 2, np_output.shape[0] // 2), cv2.MIXED_CLONE)
+
+                vid_frame = np.concatenate([np_frame, np_clone], axis=1)
+
                 video.append(vid_frame)
 
-            video = (np.stack(video, axis=0).clip(0, 1) * 255).astype(np.uint8)
+            video = np.stack(video, axis=0) #.clip(0, 1) * 255).astype(np.uint8)
         return video
 
     def prepare_input(self, batch):
@@ -356,19 +384,22 @@ class NeuralRenderer(pl.LightningModule):
         uv = out['predicted_images']
         inner_mask = out['inner_mask']
         outer_mask = out['outer_mask']
+        inner_and_mouth_mask = out['inner_and_mouth_mask']
 
         uv = warp_image_tensor(uv, out['tform'], frames.shape[-1])
         inner_mask = warp_image_tensor(inner_mask, out['tform'], frames.shape[-1])
         outer_mask = warp_image_tensor(outer_mask, out['tform'], frames.shape[-1])
+        inner_and_mouth_mask = warp_image_tensor(inner_and_mouth_mask, out['tform'], frames.shape[-1])
 
         uv = uv.permute((0, 2, 3, 1))[..., :2]
 
         frames = frames.reshape(B, T, *frames.shape[1:])
         inner_mask = inner_mask.reshape(B, T, *inner_mask.shape[1:])
         outer_mask = outer_mask.reshape(B, T, *outer_mask.shape[1:])
+        inner_and_mouth_mask = inner_and_mouth_mask.reshape(B, T, *inner_and_mouth_mask.shape[1:])
         uv = uv.reshape(B, T, *uv.shape[1:])
 
-        return params, frames, uv, inner_mask, outer_mask
+        return params, frames, uv, inner_mask, outer_mask, inner_and_mouth_mask
 
     def configure_optimizers(self):
         tex_opt = torch.optim.Adam(self.textures.values(), lr=2e-3, betas=(0.5, 0.999))
@@ -399,7 +430,7 @@ class NeuralRenderer(pl.LightningModule):
 
                 # Prepare input
                 batch = self.dict_to_torch(batch, expand_batch=True)
-                params, frames, uv, inner_mask, outer_mask = self.prepare_input(batch)
+                params, frames, uv, inner_mask, outer_mask, mouth_mask = self.prepare_input(batch)
                 IDs = batch['ID']
 
                 # Prepare network input
@@ -423,7 +454,6 @@ class NeuralRenderer(pl.LightningModule):
                 frames = self.resize(frames.reshape((B * T, *frames.shape[2:])))
                 frames = frames.reshape((B, T, *frames.shape[1:]))
 
-                # TODO: Condition on audio
                 if self.use_audio:
                     audio = batch['ind_MEL']
                     audio = audio[:, :, None, :, :].reshape((B * T, 1, *audio.shape[2:]))
@@ -478,7 +508,7 @@ class NeuralRenderer(pl.LightningModule):
 
                 # Prepare input
                 batch = self.dict_to_torch(batch, expand_batch=True)
-                params, frames, uv, inner_mask, outer_mask = self.prepare_input(batch)
+                params, frames, uv, inner_mask, outer_mask, mouth_mask = self.prepare_input(batch)
                 IDs = batch['ID']
 
                 # Prepare network input

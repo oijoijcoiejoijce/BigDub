@@ -11,9 +11,9 @@ def test_model(dataset, model, video_name, save_root):
     save_path = os.path.join(save_root, video_name + '.mp4')
     video = model.create_video_from_generator(gen, length)
 
-    writer = cv2.VideoWriter(save_path, cv2.VideoWriter_fourcc(*'mp4v'), 30, (video.shape[3], video.shape[2]))
+    writer = cv2.VideoWriter(save_path, cv2.VideoWriter_fourcc(*'mp4v'), 30, (video.shape[2], video.shape[1]))
     for frame in video:
-        frame = frame.transpose(1, 2, 0)
+        #frame = frame.transpose(1, 2, 0)
         frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
         writer.write(frame)
     writer.release()
@@ -29,7 +29,7 @@ def main(config, model_checkpoint, videos, save_root):
                              data_types=[DataTypes.MEL, DataTypes.Params, DataTypes.Frames, DataTypes.ID], split='test',
                              T=5)
 
-    model = NeuralRenderer.load_from_checkpoint(model_checkpoint, config=config, IDs=dataset.ids)
+    model = NeuralRenderer.load_from_checkpoint(model_checkpoint, config=config, IDs=dataset.ids, strict=False)
     #model.eval()
     model.cuda()
 

@@ -333,7 +333,7 @@ class DecaModule(LightningModule):
 
         return detail_conditioning_list
 
-    def gen_mask(self, codedict):
+    def gen_mask(self, codedict, jaw_values=[0, 0.5]):
 
         shapecode = codedict['shapecode']
         expcode = codedict['expcode']
@@ -349,7 +349,7 @@ class DecaModule(LightningModule):
         masks = []
         actual_jaw = posecode[..., 3]
 
-        for jaw in [0, 0.5]:
+        for jaw in [actual_jaw, *jaw_values]:
 
             posecode[..., 3] = jaw
 
@@ -384,6 +384,8 @@ class DecaModule(LightningModule):
         mask = masks[0]
         for m in masks:
             mask = torch.maximum(mask, m)
+
+        posecode[..., 3] = actual_jaw
         return mask
 
 
@@ -726,10 +728,12 @@ class DecaModule(LightningModule):
             grid = grid.detach()
         predicted_detailed_image = F.grid_sample(uv_texture, grid, align_corners=False)
         outer_mask = self.gen_mask(codedict)
+        mouth_mask = self.gen_mask(codedict, jaw_values=[0])
 
         codedict['predicted_images'] = predicted_images
         codedict['outer_mask'] = outer_mask
         codedict['inner_mask'] = mask_dub * ops['alpha_images']
+        codedict['inner_and_mouth_mask'] = mouth_mask
         codedict['detail'] = predicted_detailed_image
 
         return codedict
