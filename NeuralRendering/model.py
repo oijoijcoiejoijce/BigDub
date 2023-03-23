@@ -89,7 +89,7 @@ class NeuralRenderer(pl.LightningModule):
         if self.use_audio:
             self.audio_enc = AudioEncoder()
 
-        self.discriminator = define_D(3*T, 256, 'basic', n_layers_D=5, norm='instance', init_type='normal')
+        self.discriminator = define_D(3*T, 64, 'basic', n_layers_D=8, norm='instance', init_type='normal')
         self.vgg = VGGLOSS().to(self.device)
 
         self.resize = Resize(config.getint("Model", "image_size"))
