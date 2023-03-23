@@ -103,7 +103,7 @@ class DubbingDataset(Dataset):
 
     def __getitem__(self, item):
         while 1:
-            try:
+            # try:
 
                 if self.fix_video is None:
                     v_idx = np.random.randint(len(self.data))
@@ -226,9 +226,9 @@ class DubbingDataset(Dataset):
                 # Return the dict
                 return ret
 
-            except Exception as e:
-                print(e)
-                continue
+            #except Exception as e:
+            #    print(e)
+            #    continue
 
     def get_video_generator(self, specific_video=None):
         """Returns a generator that yields a dict of data for each frame in the video
