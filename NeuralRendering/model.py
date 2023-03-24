@@ -305,6 +305,7 @@ class NeuralRenderer(pl.LightningModule):
 
     def create_video_from_generator(self, gen, length):
         video = []
+        audios = []
         with torch.no_grad():
             for frame_idx in range(length):
                 batch = gen(frame_idx)
@@ -325,9 +326,10 @@ class NeuralRenderer(pl.LightningModule):
                     audio = batch['ind_MEL']
                     audio = audio[:, :, None, :, :].reshape((B * T, 1, *audio.shape[2:]))
                     cond = self.audio_enc(audio).reshape((B * T, -1))
-                    print(cond.mean(), cond.std())
+                    audios.append(cond)
                 else:
                     cond = torch.ones((B * T, 512), device=self.device)
+                    audios.append(cond)
 
                 # Resize
                 network_input = self.resize(network_input.reshape((B * T, *network_input.shape[2:])))
@@ -365,6 +367,7 @@ class NeuralRenderer(pl.LightningModule):
                 video.append(vid_frame)
 
             video = np.stack(video, axis=0) #.clip(0, 1) * 255).astype(np.uint8)
+            print(torch.cat(audios, dim=0).var(dim=0).mean().item())
         return video
 
     def prepare_input(self, batch):
