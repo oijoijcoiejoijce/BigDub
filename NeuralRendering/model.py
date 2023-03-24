@@ -86,8 +86,8 @@ class NeuralRenderer(pl.LightningModule):
         # self.unet = UnetAdaIN(3, 3).to(self.device)
         self.unet = UnetRenderer('UNET_8_level_ADAIN', nc, 3, norm_layer=nn.InstanceNorm2d)
 
-        if self.use_audio:
-            self.audio_enc = AudioEncoder()
+        # if self.use_audio:
+        self.audio_enc = AudioEncoder()
 
         self.discriminator = define_D(3*T, 128, 'basic', n_layers_D=8, norm='instance', init_type='normal')
         self.vgg = VGGLOSS().to(self.device)
@@ -360,7 +360,7 @@ class NeuralRenderer(pl.LightningModule):
 
                 # blended = cv2.seamlessClone(np_output, np_clone, np_difference_mask, (np_output.shape[1] // 2, np_output.shape[0] // 2), cv2.MIXED_CLONE)
 
-                vid_frame = np.concatenate([np_frame, np_clone], axis=1)
+                vid_frame = np.concatenate([np_frame, np_clone], axis=1).transpose((2, 0, 1))
 
                 video.append(vid_frame)
 
@@ -405,6 +405,7 @@ class NeuralRenderer(pl.LightningModule):
         tex_opt = torch.optim.Adam(self.textures.values(), lr=2e-3, betas=(0.5, 0.999))
         img_opt = torch.optim.Adam(self.unet.parameters(), lr=2e-4, betas=(0.5, 0.999))
         dis_opt = torch.optim.Adam(self.discriminator.parameters(), lr=2e-4, betas=(0.5, 0.999))
+
         audio_opt = torch.optim.Adam(self.audio_enc.parameters(), lr=2e-4, betas=(0.5, 0.999))
 
         tex_scheduler = torch.optim.lr_scheduler.LinearLR(tex_opt, 1.0, 0.0, 100)

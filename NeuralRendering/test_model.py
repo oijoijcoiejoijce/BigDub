@@ -13,7 +13,7 @@ def test_model(dataset, model, video_name, save_root):
 
     writer = cv2.VideoWriter(save_path, cv2.VideoWriter_fourcc(*'mp4v'), 30, (video.shape[2], video.shape[1]))
     for frame in video:
-        #frame = frame.transpose(1, 2, 0)
+        frame = frame.transpose(1, 2, 0)
         frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
         writer.write(frame)
     writer.release()
