@@ -61,13 +61,17 @@ class ParamsToImage(nn.Module):
         self.faces = torch.from_numpy(self.mesh.faces)[None]
         self.renderer = ComaMeshRenderer('smooth', 'cuda')
 
-    def forward(self, exp, jaw):
+    def forward(self, exp, jaw, shape=None):
 
         pose = torch.cat([torch.zeros((jaw.shape[0], 3), device=exp.device), jaw], dim=-1)
-        verts, *_ = self.shape_model(expression_params=exp, pose_params=pose)
+        verts, *_ = self.shape_model(expression_params=exp, pose_params=pose, shape_params=shape)
         images = self.renderer.render((verts, self.faces.to(exp.device).repeat(verts.shape[0], 1, 1)))
         return images
 
+    def vertex_forward(self, exp, jaw, shape=None):
+        pose = torch.cat([torch.zeros((jaw.shape[0], 3), device=exp.device), jaw], dim=-1)
+        verts, *_ = self.shape_model(expression_params=exp, pose_params=pose, shape_params=shape)
+        return verts
 
 class TripleSyncnet(nn.Module):
     """SyncNet with 3 inputs: audio, video, and parameters.

@@ -84,7 +84,7 @@ class NeuralRenderer(pl.LightningModule):
 
         self.prepare_textures(IDs, n_channels=nc)
         # self.unet = UnetAdaIN(3, 3).to(self.device)
-        self.unet = UnetRenderer('UNET_8_level_ADAIN', nc, 3, norm_layer=nn.InstanceNorm2d)
+        self.unet = UnetRenderer('UNET_8_level_Attn', nc, 3, norm_layer=nn.InstanceNorm2d)
 
         # if self.use_audio:
         self.audio_enc = AudioEncoder()

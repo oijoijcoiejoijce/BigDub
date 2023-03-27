@@ -18,6 +18,7 @@ class DataTypes(Enum):
     Params = 4
     Frames = 5
     ID = 6
+    WAV2VEC = 7
 
 
 class DubbingDataset(Dataset):
@@ -108,7 +109,7 @@ class DubbingDataset(Dataset):
 
     def __getitem__(self, item):
         while 1:
-            # try:
+            try:
 
                 if self.fix_video is None:
                     v_idx = np.random.randint(len(self.data))
@@ -183,6 +184,10 @@ class DubbingDataset(Dataset):
                     params = {p: all_params[p][frame_idxs] for p in all_params.keys()}
                     ret['params'] = params
 
+                if DataTypes.WAV2VEC in self.data_types:
+                    wav2vec = np.load(os.path.join(vid_root, 'wav2vec.npy'))[frame_idxs]
+                    ret['wav2vec'] = wav2vec
+
                 if not self.syncet:
                     return ret
 
@@ -228,12 +233,63 @@ class DubbingDataset(Dataset):
                     other_params = {p: all_params[p][other_frame_idxs] for p in all_params.keys()}
                     ret['other_params'] = other_params
 
+                if DataTypes.WAV2VEC in self.data_types:
+                    wav2vec = np.load(os.path.join(vid_root, 'wav2vec.npy'))[other_frame_idxs]
+                    ret['other_wav2vec'] = wav2vec
+
+
                 # Return the dict
                 return ret
 
-            #except Exception as e:
-            #    print(e)
-            #    continue
+            except Exception as e:
+                # print(e)
+                continue
+
+    def get_full_video(self, specific_video=None):
+        """Returns a generator that yields a dict of data for each frame in the video
+
+            Args:
+                specific_video (str): If not None, will only yield frames from this video # TODO: Implement this
+        """
+        v_idx = [os.path.basename(x) for x in self.data['v_path'].unique()].index(specific_video) if specific_video is not None else None
+
+        if v_idx is None:
+            v_idx = np.random.randint(len(self.data))
+
+        vid_root = self.data['v_path'].iloc[v_idx]
+        vid_root = os.path.join(self.data_root, vid_root)
+        length = self.data['length'].iloc[v_idx]
+
+        valid_frames = list(range(0, length))
+
+        ret = {}
+        if DataTypes.Frames in self.data_types:
+            frames = self.get_video_window(valid_frames, os.path.join(vid_root, 'video.mp4'))
+            ret['frames'] = frames
+
+        if DataTypes.Audio in self.data_types:
+            all_audio = np.load(os.path.join(vid_root, 'audio.npy'))
+            ret['audio'] = all_audio
+
+        if DataTypes.MEL in self.data_types:
+            all_audio = np.load(os.path.join(vid_root, 'audio.npy'))
+            ret['MEL'] = all_audio
+
+        if DataTypes.Params in self.data_types:
+            all_params = dict(np.load(os.path.join(vid_root, 'params.npz')))
+            params = {p: all_params[p][valid_frames] for p in all_params.keys()}
+            ret['params'] = params
+
+            other_frame_start = np.random.randint(0, length - self.T)
+            other_frame_end = other_frame_start + self.T
+            other_frames = list(range(other_frame_start, other_frame_end))
+            ret['other_params'] = {p: all_params[p][other_frames] for p in all_params.keys()}
+
+        if DataTypes.WAV2VEC in self.data_types:
+            wav2vec = np.load(os.path.join(vid_root, 'wav2vec.npy'))[valid_frames]
+            ret['wav2vec'] = wav2vec
+
+        return ret
 
     def get_video_generator(self, specific_video=None):
         """Returns a generator that yields a dict of data for each frame in the video
@@ -305,6 +361,10 @@ class DubbingDataset(Dataset):
                 all_params = dict(np.load(os.path.join(vid_root, 'params.npz')))
                 params = {p: all_params[p][frame_idxs] for p in all_params.keys()}
                 ret['params'] = params
+
+            if DataTypes.WAV2VEC in self.data_types:
+                wav2vec = np.load(os.path.join(vid_root, 'wav2vec.npy'))[frame_idxs]
+                ret['other_wav2vec'] = wav2vec
 
             # Return the dict
             return ret
