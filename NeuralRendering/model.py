@@ -381,7 +381,8 @@ class NeuralRenderer(pl.LightningModule):
         params = {p: params[p].reshape(B*T, *params[p].shape[2:]) for p in params}
         frames = frames.reshape(B*T, *frames.shape[2:])
 
-        out = self.emoca.decode_uv_mask_and_detail(params)
+        with torch.no_grad():
+            out = self.emoca.decode_uv_mask_and_detail(params)
 
         # Warp uv and masks
         uv = out['predicted_images']

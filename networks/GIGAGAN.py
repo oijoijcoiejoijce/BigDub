@@ -437,7 +437,7 @@ class AudioAttn(nn.Module):
         h = self.heads
 
         q, v = (self.to_q(fmap), self.to_v(context))
-        k = self.k
+        k = self.k.repeat(q.shape[0], 1, 1)
 
         k, v = map(lambda t: rearrange(t, 'b n (h d) -> (b h) n d', h=h), (k, v))
 
@@ -540,7 +540,7 @@ class TextAttention(nn.Module):
 
 def FeedForward(
         dim,
-        mult=4,
+        mult=1,
         channel_first=False
 ):
     dim_hidden = int(dim * mult)
@@ -591,6 +591,23 @@ class CrossAttentionBlock(nn.Module):
         x = self.ff(x) + x
         return x
 
+
+class AudioAttentionBlock(nn.Module):
+    def __init__(
+            self,
+            dim,
+            dim_head=64,
+            heads=8,
+            ff_mult=4
+    ):
+        super().__init__()
+        self.attn = AudioAttn(dim=dim, dim_head=dim_head, heads=heads)
+        self.ff = FeedForward(dim=dim, mult=ff_mult, channel_first=True)
+
+    def forward(self, x, cond):
+        x = self.attn(x, cond) + x
+        x = self.ff(x) + x
+        return x
 
 class Transformer(nn.Module):
     def __init__(

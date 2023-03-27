@@ -55,8 +55,13 @@ def main():
     from Datasets import DubbingDataset, DataTypes
     from pytorch_lightning.callbacks import ModelSummary
     import configparser
+    import argparse
 
-    config_path = 'configs/Laptop.ini'
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--config', type=str, default='configs/Laptop.ini')
+    args = parser.parse_args()
+
+    config_path = args.config
     config = configparser.ConfigParser()
     config.read(config_path)
 
@@ -91,6 +96,7 @@ def main():
                          default_root_dir="C:/Users/jacks/Documents/Data/DubbingForExtras/checkpoints/sync/basic",
                          logger=wandb_logger, gradient_clip_val=1.0, accumulate_grad_batches=grad_acc)
     trainer.fit(model, train_dataloader, val_dataloader)
+
 
 if __name__ == '__main__':
     main()

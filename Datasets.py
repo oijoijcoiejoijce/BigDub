@@ -178,6 +178,8 @@ class DubbingDataset(Dataset):
                 if DataTypes.ID in self.data_types:
                     ID = self.data['face_ID'].iloc[v_idx]
                     ret['ID'] = ID
+                    ret['ID_idx'] = np.where(self.ids==ID)
+                    ret['ID_one_hot'] = np.eye(len(self.ids))[ret['ID_idx']].astype('float32')
 
                 if DataTypes.Params in self.data_types:
                     all_params = dict(np.load(os.path.join(vid_root, 'params.npz')))
@@ -289,6 +291,12 @@ class DubbingDataset(Dataset):
             wav2vec = np.load(os.path.join(vid_root, 'wav2vec.npy'))[valid_frames]
             ret['wav2vec'] = wav2vec
 
+        if DataTypes.ID in self.data_types:
+            ID = self.data['face_ID'].iloc[v_idx]
+            ret['ID'] = ID
+            ret['ID_idx'] = np.where(self.ids==ID)
+            ret['ID_one_hot'] = np.eye(len(self.ids))[ret['ID_idx']].astype('float32')
+
         return ret
 
     def get_video_generator(self, specific_video=None):
@@ -356,6 +364,8 @@ class DubbingDataset(Dataset):
             if DataTypes.ID in self.data_types:
                 ID = self.data['face_ID'].iloc[v_idx]
                 ret['ID'] = ID
+                ret['ID_idx'] = np.where(self.ids==ID)
+                ret['ID_one_hot'] = np.eye(len(self.ids))[ret['ID_idx']].astype('float32')
 
             if DataTypes.Params in self.data_types:
                 all_params = dict(np.load(os.path.join(vid_root, 'params.npz')))

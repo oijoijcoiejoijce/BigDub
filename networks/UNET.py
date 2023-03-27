@@ -5,7 +5,7 @@ import functools
 
 from networks.GIGAGAN import SelfAttentionBlock
 from networks.GIGAGAN import CrossAttention2 as CrossAttention
-
+# from networks.GIGAGAN import AudioAttn as CrossAttention
 
 
 class UnetSkipConnectionBlock(nn.Module):
@@ -292,7 +292,7 @@ class UnetSkipConnectionBlock_Attn(nn.Module):
                 nn.Upsample(scale_factor=2, mode="bilinear", align_corners=False),
                 nn.Conv2d(inner_nc, outer_nc, kernel_size=3, stride=1, padding=1, bias=use_bias),
                 nn.LeakyReLU(0.2, True),
-                SelfAttentionBlock(outer_nc)
+                # SelfAttentionBlock(outer_nc)
             )
 
             down = [downrelu, downconv]

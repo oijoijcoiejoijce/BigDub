@@ -9,16 +9,16 @@ from networks import AudioEncoder
 from pytorch_lightning.loggers import WandbLogger
 from networks.Wav2VecFeatures import Wav2Vec2Model
 from networks.syncnet import ParamsToImage
+from Audio2Expression.Imitator import Imitator
 import numpy as np
 
 
 class Audio2ExpressionLSTM(nn.Module):
 
-    def __init__(self, n_params, n_features=80, n_hidden=64, n_layers=1, T=5):
+    def __init__(self, n_params, n_hidden=64, n_layers=1, T=5):
         super(Audio2ExpressionLSTM, self).__init__()
 
         self.n_params = n_params
-        self.n_features = n_features
         self.n_hidden = n_hidden
         self.n_layers = n_layers
         self.T = T
@@ -37,16 +37,18 @@ class Audio2ExpressionLSTM(nn.Module):
         x, _ = self.lstm(audio_enc)
         return x
 
-
 class Audio2Expression(pl.LightningModule):
 
-    def __init__(self, config, logger):
+    def __init__(self, config, logger, n_ids):
         super().__init__()
         self.wandb_logger = logger
         self.save_hyperparameters()
-        self.model = Audio2ExpressionLSTM(53)
+        #self.model = Audio2ExpressionLSTM(53)
+        self.model = Imitator(53)
+
+        self.styles = nn.Linear(n_ids, 64, bias=False)
         self.style_encoder = nn.LSTM(53, 64, 1, batch_first=True)
-        self.fc = nn.Sequential(nn.Linear(64, 64), nn.ReLU(), nn.Linear(64, 64), nn.ReLU(), nn.Linear(64, 53))
+        self.fc = nn.Linear(64, 53, bias=False)
 
         self.loss = nn.MSELoss()
         self.metric = None
@@ -56,14 +58,20 @@ class Audio2Expression(pl.LightningModule):
         audio = batch['wav2vec']
         params = batch['params']
         other_params = batch['other_params']
+        id_one_hot = batch['ID_one_hot']
 
         target_params = torch.cat([params['expcode'], params['posecode'][..., 3:]], dim=-1)
         other_params = torch.cat([other_params['expcode'], other_params['posecode'][..., 3:]], dim=-1)
 
-        return audio, target_params, other_params
+        return audio, target_params, other_params, id_one_hot
 
-    def forward(self, audio, other_params):
-        _, (style, _) = self.style_encoder(other_params)
+    def forward(self, audio, target_params, other_params, id_one_hot=None):
+
+        if id_one_hot is None:
+            _, (style, _) = self.style_encoder(other_params)
+        else:
+            style = self.styles(id_one_hot)
+
         style = style.reshape((other_params.shape[0], -1, 64))
         style = style.repeat(1, audio.shape[1], 1)
 
@@ -74,8 +82,8 @@ class Audio2Expression(pl.LightningModule):
 
     def training_step(self, batch):
 
-        audio, target_params, other_params = self.prep_data(batch)
-        pred_params = self(audio, other_params)
+        audio, target_params, other_params, id_one_hot = self.prep_data(batch)
+        pred_params = self(audio, target_params, other_params, id_one_hot)
 
         target_exp, target_jaw = target_params[..., :50], target_params[..., 50:]
         pred_exp, pred_jaw = pred_params[..., :50], pred_params[..., 50:]
@@ -120,8 +128,8 @@ class Audio2Expression(pl.LightningModule):
 
         with torch.no_grad():
             batch = self.dict_to_torch(batch, expand_batch=True)
-            audio, target_params, other_params = self.prep_data(batch)
-            pred_params = self(audio, other_params)
+            audio, target_params, other_params, id_one_hot = self.prep_data(batch)
+            pred_params = self(audio, target_params, other_params, id_one_hot)
 
             exp, pose = pred_params[0, ..., :50], pred_params[0, ..., 50:]
             exp_real, pose_real = target_params[0, ..., :50], target_params[0, ..., 50:]
@@ -149,8 +157,8 @@ class Audio2Expression(pl.LightningModule):
                                              step=self.trainer.global_step)
 
     def validation_step(self, batch, idx):
-        audio, target_params, other_params = self.prep_data(batch)
-        pred_params = self(audio, other_params)
+        audio, target_params, other_params, id_one_hot = self.prep_data(batch)
+        pred_params = self(audio, target_params, other_params, id_one_hot)
 
         target_exp, target_jaw = target_params[..., :50], target_params[..., 50:]
         pred_exp, pred_jaw = pred_params[..., :50], pred_params[..., 50:]
@@ -193,7 +201,7 @@ def main():
 
     train_dataloader = torch.utils.data.DataLoader(
         DubbingDataset('C:/Users/jacks/Documents/Data/DubbingForExtras/v3',
-            data_types=[DataTypes.WAV2VEC, DataTypes.Params], T=21),
+            data_types=[DataTypes.WAV2VEC, DataTypes.Params, DataTypes.ID], T=41),
         batch_size=8,
         shuffle=True,
         num_workers=0,
@@ -201,14 +209,15 @@ def main():
 
     val_dataloader = torch.utils.data.DataLoader(
         DubbingDataset('C:/Users/jacks/Documents/Data/DubbingForExtras/v3',
-            data_types=[DataTypes.WAV2VEC, DataTypes.Params], split='test', T=21),
+            data_types=[DataTypes.WAV2VEC, DataTypes.Params, DataTypes.ID], split='test', T=41),
         batch_size=8,
         shuffle=True,
         num_workers=0
     )
 
     logger = WandbLogger(project='Audio2Expression')
-    model = Audio2Expression(config, logger)
+    # logger = None
+    model = Audio2Expression(config, logger, val_dataloader.dataset.n_ids)
 
     trainer = pl.Trainer(gpus=1, max_epochs=1000, gradient_clip_val=0.5,
                          callbacks=[ModelSummary(max_depth=-1)], logger=logger)
