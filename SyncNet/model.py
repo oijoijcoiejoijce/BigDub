@@ -1,3 +1,7 @@
+import sys
+from pathlib import Path
+sys.path.append(str(Path(__file__).parent.parent))
+
 import torch
 import pytorch_lightning as pl
 from pytorch_lightning import Trainer
