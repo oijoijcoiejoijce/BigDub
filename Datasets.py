@@ -183,6 +183,8 @@ class DubbingDataset(Dataset):
 
                 if DataTypes.Params in self.data_types:
                     all_params = dict(np.load(os.path.join(vid_root, 'params.npz')))
+                    all_params['shapecode'] = np.mean(all_params['shapecode'], axis=0)[None].repeat(all_params['shapecode'].shape[0], 0)
+                    #all_params['cam'] = np.mean(all_params['cam'], axis=0)[None].repeat(all_params['cam'].shape[0], 0)
                     params = {p: all_params[p][frame_idxs] for p in all_params.keys()}
                     ret['params'] = params
 
@@ -279,6 +281,9 @@ class DubbingDataset(Dataset):
 
         if DataTypes.Params in self.data_types:
             all_params = dict(np.load(os.path.join(vid_root, 'params.npz')))
+            all_params['shapecode'] = np.mean(all_params['shapecode'], axis=0)[None].repeat(
+                all_params['shapecode'].shape[0], 0)
+            #all_params['cam'] = np.mean(all_params['cam'], axis=0)[None].repeat(all_params['cam'].shape[0], 0)
             params = {p: all_params[p][valid_frames] for p in all_params.keys()}
             ret['params'] = params
 
@@ -369,6 +374,9 @@ class DubbingDataset(Dataset):
 
             if DataTypes.Params in self.data_types:
                 all_params = dict(np.load(os.path.join(vid_root, 'params.npz')))
+                all_params['shapecode'] = np.mean(all_params['shapecode'], axis=0)[None].repeat(
+                    all_params['shapecode'].shape[0], 0)
+                # all_params['cam'] = np.mean(all_params['cam'], axis=0)[None].repeat(all_params['cam'].shape[0], 0)
                 params = {p: all_params[p][frame_idxs] for p in all_params.keys()}
                 ret['params'] = params
 
