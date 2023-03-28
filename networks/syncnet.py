@@ -382,15 +382,16 @@ class TripleSyncnet(nn.Module):
         loss = total_loss / count
         """
 
-        vp_loss_same = self._compute_loss(video_enc_a, param_enc_a, is_same=True)
-        vp_loss_different = self._compute_loss(video_enc_a, param_enc_b, is_same=False)
+        #vp_loss_same = self._compute_loss(video_enc_a, param_enc_a, is_same=True)
+        #vp_loss_different = self._compute_loss(video_enc_a, param_enc_b, is_same=False)
 
         av_loss_same = self._compute_loss(audio_enc_a, video_enc_a, is_same=True)
         av_loss_different = self._compute_loss(audio_enc_a, video_enc_b, is_same=False)
 
-        vp_loss = (vp_loss_same + vp_loss_different) / 2
+        #vp_loss = (vp_loss_same + vp_loss_different) / 2
         av_loss = (av_loss_same + av_loss_different) / 2
 
-        loss = (vp_loss + av_loss) / 2
+        #loss = (vp_loss + av_loss) / 2
+        loss = av_loss
 
         return loss

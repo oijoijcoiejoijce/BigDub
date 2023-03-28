@@ -30,11 +30,17 @@ class SyncNet(pl.LightningModule):
             params = self.prepare_parameters(params)
             other_params = self.prepare_parameters(other_params)
 
-            mel_enc, params_enc, vid_enc = self.net(audio, params, frames, name='a')
-            other_mel_enc, other_params_enc, other_vid_enc = self.net(other_audio, other_params, other_frames, name='b')
+            #mel_enc, params_enc, vid_enc = self.net(audio, params, frames, name='a')
+            #other_mel_enc, other_params_enc, other_vid_enc = self.net(other_audio, other_params, other_frames, name='b')
+
+            mel_enc, vid_enc = self.net(audio=audio, frames=frames, name='a')
+            other_mel_enc, other_vid_enc = self.net(audio=other_audio, frames=other_frames, name='b')
+
             #loss = self.net.compute_loss(mel_enc, params_enc, vid_enc, other_mel_enc, other_params_enc, other_vid_enc)
 
-            loss = self.net.compute_loss(mel_enc, params_enc, vid_enc, other_mel_enc, other_params_enc, other_vid_enc)
+            #loss = self.net.compute_loss(mel_enc, params_enc, vid_enc, other_mel_enc, other_params_enc, other_vid_enc)
+            loss = self.net.compute_loss(audio_enc_a=mel_enc, video_enc_a=vid_enc,
+                                         audio_enc_b=other_mel_enc, video_enc_b=other_vid_enc)
 
             self.log('train_loss', loss)
             return loss
