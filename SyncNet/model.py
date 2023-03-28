@@ -87,7 +87,7 @@ def main():
             data_types=[DataTypes.MEL, DataTypes.Params, DataTypes.Frames], T=5, syncet=True),
         batch_size=batch_size,
         shuffle=True,
-        num_workers=2,
+        num_workers=4,
         pin_memory=True
     )
 
@@ -97,7 +97,7 @@ def main():
                        syncet=True),
         batch_size=batch_size,
         shuffle=True,
-        num_workers=1,
+        num_workers=4,
     )
     wandb_logger = WandbLogger(project='DubbingForExtras_Syncnet')
     model = SyncNet(config)
