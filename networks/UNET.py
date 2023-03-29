@@ -346,6 +346,97 @@ class UnetSkipConnectionBlock_Attn(nn.Module):
 
             return torch.cat([x, y], 1)
 
+class UnetSkipConnectionBlock_Audio(nn.Module):
+    def __init__(self, outer_nc, inner_nc, input_nc=None, submodule=None, outermost=False, innermost=False,
+                 norm_layer=nn.BatchNorm2d, use_dropout=False, cond_nc=512):
+        super(UnetSkipConnectionBlock_Audio, self).__init__()
+        self.outermost = outermost
+        self.innermost = innermost
+        if type(norm_layer) == functools.partial:
+            use_bias = norm_layer.func == nn.InstanceNorm2d
+        else:
+            use_bias = norm_layer == nn.InstanceNorm2d
+        if input_nc is None:
+            input_nc = outer_nc
+
+        # use_norm = False
+        use_norm = True
+
+        downconv = nn.Conv2d(input_nc, inner_nc, kernel_size=4, stride=2, padding=1, bias=use_bias)
+        downrelu = nn.LeakyReLU(0.2, True)
+        # downattn = SelfAttentionBlock(inner_nc)
+
+        if use_norm: downnorm = norm_layer(inner_nc)
+        uprelu = nn.ReLU(True)
+        if use_norm: upnorm = norm_layer(outer_nc)
+
+        if outermost:
+            fisrt_conv = nn.Conv2d(input_nc, inner_nc, kernel_size=7, stride=1, padding=3, bias=use_bias)
+            downconv = nn.Conv2d(inner_nc, inner_nc * 2, kernel_size=4, stride=2, padding=1, bias=use_bias)
+
+            upconv = nn.Sequential(
+                nn.Upsample(scale_factor=2, mode="bilinear", align_corners=False),
+                nn.Conv2d(inner_nc * 2, inner_nc * 2, kernel_size=3, stride=1, padding=1, bias=use_bias),
+                nn.LeakyReLU(0.2, True),
+                nn.Conv2d(inner_nc * 2, inner_nc * 2, kernel_size=3, stride=1, padding=1, bias=use_bias),
+                nn.LeakyReLU(0.2, True),
+                nn.Conv2d(inner_nc * 2, outer_nc, kernel_size=1, stride=1, padding=0, bias=use_bias),
+            )
+
+            down = [fisrt_conv, downconv]
+            up = [uprelu, upconv, nn.Tanh()]
+            model = down + [submodule] + up
+        elif innermost:
+            # upconv = nn.ConvTranspose2d(inner_nc, outer_nc, kernel_size=4, stride=2, padding=1, bias=use_bias)
+            upconv = nn.Sequential(
+                nn.Upsample(scale_factor=2, mode="bilinear", align_corners=False),
+                nn.Conv2d(inner_nc, outer_nc, kernel_size=3, stride=1, padding=1, bias=use_bias),
+                nn.LeakyReLU(0.2, True),
+                # SelfAttentionBlock(outer_nc)
+            )
+
+            down = [downrelu, downconv]
+            if use_norm:
+                up = [uprelu, upconv, upnorm]
+            else:
+                up = [uprelu, upconv]
+            model = down + up
+        else:
+            # upconv = nn.ConvTranspose2d(inner_nc * 2, outer_nc, kernel_size=4, stride=2, padding=1, bias=use_bias)
+            upconv = nn.Sequential(
+                nn.Upsample(scale_factor=2, mode="bilinear", align_corners=False),
+                nn.Conv2d(inner_nc * 2, outer_nc, kernel_size=3, stride=1, padding=1, bias=use_bias),
+                nn.LeakyReLU(0.2, True)
+            )
+
+            if use_norm: down = [downrelu, downconv, downnorm]
+            down = [downrelu, downconv]
+            if use_norm:
+                up = [uprelu, upconv, upnorm]
+            else:
+                up = [uprelu, upconv]
+
+            if use_dropout:
+                model = down + [submodule] + up + [nn.Dropout(0.5)]
+            else:
+                model = down + [submodule] + up
+
+        self.model = nn.ModuleList(model)
+        self.cond_layer = nn.Linear(cond_nc, outer_nc, bias=False)
+
+    def forward(self, x, cond=None):
+        if self.outermost:
+            cond = self.cond_layer(cond)
+            for layer in self.model:
+                x = layer(x)
+            return x
+        else:
+            y = x.clone()
+            for layer in self.model:
+                y = layer(y)
+
+            return torch.cat([x, y], 1)
+
 # dilated convs, without downsampling
 class UnetSkipConnectionBlock_DC(nn.Module):
     def __init__(self, outer_nc, inner_nc, input_nc=None, submodule=None, outermost=False, innermost=False,
@@ -628,12 +719,30 @@ class UnetRenderer(nn.Module):
             unet_block = UnetSkipConnectionBlock_Attn(output_nc, ngf, input_nc=input_nc, submodule=unet_block,
                                                        outermost=True, norm_layer=norm_layer)
 
+        elif renderer == 'UNET_8_level_Audio':
+            print('>>>> UNET_8_level_Audio <<<<')
+            num_downs = 8
+            unet_block = UnetSkipConnectionBlock_Audio(ngf * 8, ngf * 8, input_nc=None, submodule=None, norm_layer=norm_layer,
+                                                 innermost=True)
+            for i in range(num_downs - 5):
+                unet_block = UnetSkipConnectionBlock_Audio(ngf * 8, ngf * 8, input_nc=None, submodule=unet_block,
+                                                     norm_layer=norm_layer, use_dropout=use_dropout)
+            unet_block = UnetSkipConnectionBlock_Audio(ngf * 4, ngf * 8, input_nc=None, submodule=unet_block,
+                                                 norm_layer=norm_layer)
+            unet_block = UnetSkipConnectionBlock_Audio(ngf * 2, ngf * 4, input_nc=None, submodule=unet_block,
+                                                 norm_layer=norm_layer)
+            unet_block = UnetSkipConnectionBlock_Audio(ngf, ngf * 2, input_nc=None, submodule=unet_block,
+                                                 norm_layer=norm_layer)
+            unet_block = UnetSkipConnectionBlock_Audio(output_nc, ngf, input_nc=input_nc, submodule=unet_block,
+                                                 outermost=True, norm_layer=norm_layer)
+
+
         self.model = unet_block
 
     def forward(self, features, cond=None):
         unet_input = features
 
-        if 'ADAIN' in self.renderer or 'Attn' in self.renderer:
+        if 'ADAIN' in self.renderer or 'Attn' in self.renderer or 'Audio' in self.renderer:
             return self.model(unet_input, cond)
         return self.model(unet_input)
 

@@ -12,8 +12,6 @@ from torchvision.io import VideoReader
 import itertools
 from enum import Enum
 
-from line_profiler_pycharm import profile
-
 class DataTypes(Enum):
     Audio = 1
     MEL = 2
