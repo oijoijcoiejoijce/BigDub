@@ -110,7 +110,6 @@ class DubbingDataset(Dataset):
 
         return torch.cat(frames)
 
-    @profile
     def __getitem__(self, item):
         while 1:
             try:
