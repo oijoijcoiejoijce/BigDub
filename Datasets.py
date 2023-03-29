@@ -8,8 +8,11 @@ import numpy as np
 
 import torch
 from torchvision.transforms import Compose, ToTensor, Resize
+from torchvision.io import VideoReader
+import itertools
 from enum import Enum
 
+from line_profiler_pycharm import profile
 
 class DataTypes(Enum):
     Audio = 1
@@ -84,6 +87,7 @@ class DubbingDataset(Dataset):
             frames.append(img[None])
         return torch.cat(frames)
 
+    @profile
     def get_video_window(self, idxs, video_path):
 
         if not os.path.exists(video_path):
@@ -92,8 +96,8 @@ class DubbingDataset(Dataset):
 
         frames = []
         cap = cv2.VideoCapture(video_path)
+        cap.set(cv2.CAP_PROP_POS_FRAMES, idxs[0])
         for idx in idxs:
-            cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
             ret, img = cap.read()
             img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
@@ -105,8 +109,11 @@ class DubbingDataset(Dataset):
 
             img = self.transform(img).float()
             frames.append(img[None])
+
+
         return torch.cat(frames)
 
+    @profile
     def __getitem__(self, item):
         while 1:
             try:

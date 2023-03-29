@@ -80,7 +80,6 @@ class TripleSyncnet(nn.Module):
 
         super(TripleSyncnet, self).__init__()
         self.audio_enc = AudioEncoder()
-
         self.param_enc = nn.Sequential(
             nn.Linear(n_params * T, 512),
             nn.LeakyReLU(),

@@ -1,3 +1,6 @@
+import os
+os.environ['KMP_DUPLICATE_LIB_OK']='True'
+
 import sys
 from pathlib import Path
 sys.path.append(str(Path(__file__).parent.parent))
@@ -10,7 +13,13 @@ from networks.syncnet import TripleSyncnet
 from pytorch_lightning.loggers import WandbLogger
 
 import os
-os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
+
+debug = False
+if debug:
+    os.environ['WANDB_MODE'] = 'dryrun'
+    os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
+else:
+    torch.backends.cudnn.benchmark = True
 
 class SyncNet(pl.LightningModule):
 
@@ -21,6 +30,7 @@ class SyncNet(pl.LightningModule):
         def prepare_parameters(self, params):
             exp, jaw = params['expcode'], params['posecode'][..., 3:]
             return torch.cat([exp, jaw], dim=-1)
+
 
         def training_step(self, batch, batch_idx):
 
@@ -87,7 +97,7 @@ def main():
             data_types=[DataTypes.MEL, DataTypes.Params, DataTypes.Frames], T=5, syncet=True),
         batch_size=batch_size,
         shuffle=True,
-        num_workers=4,
+        num_workers=2,
         pin_memory=True
     )
 
@@ -97,7 +107,7 @@ def main():
                        syncet=True),
         batch_size=batch_size,
         shuffle=True,
-        num_workers=4,
+        num_workers=0,
     )
     wandb_logger = WandbLogger(project='DubbingForExtras_Syncnet')
     model = SyncNet(config)
