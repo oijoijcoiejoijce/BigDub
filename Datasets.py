@@ -85,7 +85,6 @@ class DubbingDataset(Dataset):
             frames.append(img[None])
         return torch.cat(frames)
 
-    @profile
     def get_video_window(self, idxs, video_path):
 
         if not os.path.exists(video_path):
