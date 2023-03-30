@@ -387,6 +387,14 @@ class DubbingDataset(Dataset):
                 wav2vec = np.load(os.path.join(vid_root, 'wav2vec.npy'))[frame_idxs]
                 ret['other_wav2vec'] = wav2vec
 
+            if self.syncet:
+
+                if DataTypes.Frames in self.data_types:
+                    shuffle = np.random.permutation(len(valid_frames))
+                    shuffle_idxs = shuffle[:self.T]
+                    other_frames = self.get_video_window(shuffle_idxs, os.path.join(vid_root, 'video.mp4'))
+                    ret['other_frames'] = other_frames
+
             # Return the dict
             return ret
         return generator, length

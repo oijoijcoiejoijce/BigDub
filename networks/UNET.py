@@ -371,8 +371,8 @@ class UnetSkipConnectionBlock_Audio(nn.Module):
         if use_norm: upnorm = norm_layer(outer_nc)
 
         if outermost:
-            fisrt_conv = nn.Conv2d(input_nc, inner_nc, kernel_size=7, stride=1, padding=3, bias=use_bias)
-            downconv = nn.Conv2d(inner_nc, inner_nc * 2, kernel_size=4, stride=2, padding=1, bias=use_bias)
+            fisrt_conv = nn.Conv2d(input_nc + inner_nc, inner_nc, kernel_size=7, stride=1, padding=3, bias=use_bias)
+            downconv = nn.Conv2d(inner_nc, inner_nc, kernel_size=4, stride=2, padding=1, bias=use_bias)
 
             upconv = nn.Sequential(
                 nn.Upsample(scale_factor=2, mode="bilinear", align_corners=False),
@@ -422,11 +422,14 @@ class UnetSkipConnectionBlock_Audio(nn.Module):
                 model = down + [submodule] + up
 
         self.model = nn.ModuleList(model)
-        self.cond_layer = nn.Linear(cond_nc, outer_nc, bias=False)
+        self.cond_layer = nn.Linear(cond_nc, inner_nc, bias=False)
 
     def forward(self, x, cond=None):
         if self.outermost:
             cond = self.cond_layer(cond)
+            cond = cond.unsqueeze(-1).unsqueeze(-1)
+            cond = cond.repeat(1, 1, x.size(2), x.size(3))
+            x = torch.cat([x, cond], 1)
             for layer in self.model:
                 x = layer(x)
             return x
