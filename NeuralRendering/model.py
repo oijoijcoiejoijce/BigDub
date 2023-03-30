@@ -223,7 +223,7 @@ class NeuralRenderer(pl.LightningModule):
         self.train_discriminator(frames, network_output, opt_discriminator)
 
         loss = self.train_generator(network_output, frames, network_input, opt_tex, opt_img, opt_audio)
-        if self.current_epoch > 50:
+        if self.current_epoch > 100:
             scheduler_tex.step()
             scheduler_img.step()
             scheduler_discriminator.step()
@@ -622,7 +622,7 @@ def main():
     wandb_logger = WandbLogger(project='DubbingForExtras_NR')
     model = NeuralRenderer(config, train_dataloader.dataset.ids, logger=wandb_logger)
 
-    trainer = pl.Trainer(gpus=1, max_epochs=100,
+    trainer = pl.Trainer(gpus=1, max_epochs=200,
                          callbacks=[ModelSummary(max_depth=2)],
                          default_root_dir=checkpoint_path, num_sanity_val_steps=0)
 
