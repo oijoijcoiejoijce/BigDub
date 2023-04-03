@@ -621,6 +621,17 @@ def main():
             num_workers=n_train_workers,
             pin_memory=True
         )
+
+        val_videos = [f'{args.restrict_to_ID}_{i}' for i in [36, 37]]
+        val_dataloader = torch.utils.data.DataLoader(
+            DubbingDataset(data_root,
+                           data_types=[DataTypes.MEL, DataTypes.Params, DataTypes.Frames, DataTypes.ID],
+                           split='all', T=5, syncet=True, fix_ID=args.restrict_to_ID, restrict_videos=val_videos),
+            batch_size=batch_size,
+            shuffle=False,
+            num_workers=n_val_workers
+        )
+
     else:
         train_dataloader = torch.utils.data.DataLoader(
             DubbingDataset(data_root,
@@ -632,14 +643,14 @@ def main():
             pin_memory=True
         )
 
-    val_dataloader = torch.utils.data.DataLoader(
-        DubbingDataset(data_root,
-            data_types=[DataTypes.MEL, DataTypes.Params, DataTypes.Frames, DataTypes.ID],
-                       split='test', T=5, syncet=True),
-        batch_size=batch_size,
-        shuffle=False,
-        num_workers=n_val_workers
-    )
+        val_dataloader = torch.utils.data.DataLoader(
+            DubbingDataset(data_root,
+                data_types=[DataTypes.MEL, DataTypes.Params, DataTypes.Frames, DataTypes.ID],
+                           split='test', T=5, syncet=True),
+            batch_size=batch_size,
+            shuffle=False,
+            num_workers=n_val_workers
+        )
     wandb_logger = WandbLogger(project='DubbingForExtras_NR')
     model = NeuralRenderer(config, train_dataloader.dataset.ids, logger=wandb_logger)
 
