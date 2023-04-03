@@ -57,15 +57,13 @@ class DubbingDataset(Dataset):
         #self.len = self.data['length'].sum()
         self.len = len(self.data)  # This way makes validation per epoch work better using lightning
 
-        if fix_video is not None:
-            self.len = 200
         self.T = T
 
         self.transform = Compose([ToTensor()])
         self.fix_video = fix_video
 
     def __len__(self):
-        if self.fix_video is not None:
+        if self.len < 200:
             return 200   # Just a big number to make sure we get all the frames
         return self.len
 
