@@ -62,6 +62,8 @@ class DubbingDataset(Dataset):
         self.fix_video = fix_video
 
     def __len__(self):
+        if self.fix_video is not None:
+            return 1000   # Just a big number to make sure we get all the frames
         return self.len
 
     def sample_idxs(self, center_idx, valid_frames):
