@@ -615,7 +615,7 @@ def main():
         train_dataloader = torch.utils.data.DataLoader(
             DubbingDataset(data_root,
                            data_types=[DataTypes.MEL, DataTypes.Params, DataTypes.Frames, DataTypes.ID],
-                           T=5, syncet=True, split='all', restrict_videos=restrict_videos, fix_ID=args.restrict_to_ID),
+                           T=5, syncet=True, split='all', restrict_videos=videos, fix_ID=args.restrict_to_ID),
             batch_size=batch_size,
             shuffle=True,
             num_workers=n_train_workers,
