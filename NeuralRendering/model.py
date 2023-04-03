@@ -608,8 +608,10 @@ def main():
 
     torch.backends.cudnn.benchmark = True
 
-    restrict_videos = None if args.max_vid_idx == -1 else list(range(args.max_vid_idx))
+
     if args.restrict_to_ID != '':
+        restrict_videos = None if args.max_vid_idx == -1 else list(range(args.max_vid_idx))
+        videos = [f'{args.restrict_to_ID}_{i}' for i in restrict_videos]
         train_dataloader = torch.utils.data.DataLoader(
             DubbingDataset(data_root,
                            data_types=[DataTypes.MEL, DataTypes.Params, DataTypes.Frames, DataTypes.ID],
