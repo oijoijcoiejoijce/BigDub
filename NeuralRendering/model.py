@@ -586,6 +586,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', type=str, default='configs/Laptop.ini')
     parser.add_argument('--load_checkpoint', type=str, default='')
+    parser.add_argument('--restrict_to_ID', type=str, default='')
+    parser.add_argument('--max_vid_idx', type=int, default=-1)
     args = parser.parse_args()
 
     config_path = args.config
@@ -601,15 +603,27 @@ def main():
 
     torch.backends.cudnn.benchmark = True
 
-    train_dataloader = torch.utils.data.DataLoader(
-        DubbingDataset(data_root,
-            data_types=[DataTypes.MEL, DataTypes.Params, DataTypes.Frames, DataTypes.ID],
-                       T=5, syncet=True, split='train'),
-        batch_size=batch_size,
-        shuffle=True,
-        num_workers=n_train_workers,
-        pin_memory=True
-    )
+    restrict_videos = None if args.max_vid_idx == -1 else list(range(args.max_vid_idx))
+    if args.restrict_to_ID != '':
+        train_dataloader = torch.utils.data.DataLoader(
+            DubbingDataset(data_root,
+                           data_types=[DataTypes.MEL, DataTypes.Params, DataTypes.Frames, DataTypes.ID],
+                           T=5, syncet=True, split='all', restrict_videos=restrict_videos, fix_ID=args.restrict_to_ID),
+            batch_size=batch_size,
+            shuffle=True,
+            num_workers=n_train_workers,
+            pin_memory=True
+        )
+    else:
+        train_dataloader = torch.utils.data.DataLoader(
+            DubbingDataset(data_root,
+                data_types=[DataTypes.MEL, DataTypes.Params, DataTypes.Frames, DataTypes.ID],
+                           T=5, syncet=True, split='train'),
+            batch_size=batch_size,
+            shuffle=True,
+            num_workers=n_train_workers,
+            pin_memory=True
+        )
 
     val_dataloader = torch.utils.data.DataLoader(
         DubbingDataset(data_root,
