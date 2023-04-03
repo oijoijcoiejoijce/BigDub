@@ -601,6 +601,11 @@ def main():
     n_val_workers = int(config.getint('NR Training', 'n_val_workers'))
     checkpoint_path = config.get('Paths', 'NR checkpoint')
 
+    if args.restrict_to_ID != '':
+        checkpoint_path = os.path.join(checkpoint_path, args.restrict_to_ID+str(args.max_vid_idx))
+    else:
+        checkpoint_path = os.path.join(checkpoint_path, 'generic')
+
     torch.backends.cudnn.benchmark = True
 
     restrict_videos = None if args.max_vid_idx == -1 else list(range(args.max_vid_idx))
