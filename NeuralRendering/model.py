@@ -659,7 +659,7 @@ def main():
     model = NeuralRenderer(config, train_dataloader.dataset.ids, logger=wandb_logger)
     checkpoint_callback = ModelCheckpoint(dirpath=checkpoint_path, save_top_k=2, monitor="val_loss")
     trainer = pl.Trainer(gpus=1, max_epochs=200,
-                         callbacks=[ModelSummary(max_depth=2)],
+                         callbacks=[ModelSummary(max_depth=2), checkpoint_callback],
                          default_root_dir=checkpoint_path, num_sanity_val_steps=0)
 
     if args.load_checkpoint:
