@@ -9,6 +9,7 @@ import cv2
 sys.path.append(str(Path(__file__).parent.parent))
 
 import pytorch_lightning as pl
+from pytorch_lightning.callbacks import ModelCheckpoint
 import torch
 import torch.nn.functional as F
 import torch.nn as nn
@@ -241,6 +242,8 @@ class NeuralRenderer(pl.LightningModule):
                    "val_loss_tex": np.mean(self.losses_tex),
                    "val_loss_img": np.mean(self.losses_img)}, step=self.trainer.global_step)
 
+        self.log('val_loss', np.mean(self.losses))
+
     def validation_step(self, batch, *args):
 
         # Get data
@@ -366,7 +369,8 @@ class NeuralRenderer(pl.LightningModule):
 
                 # blended = cv2.seamlessClone(np_output, np_clone, np_difference_mask, (np_output.shape[1] // 2, np_output.shape[0] // 2), cv2.MIXED_CLONE)
 
-                vid_frame = np.concatenate([np_frame, np_clone], axis=1).transpose((2, 0, 1))
+                #vid_frame = np.concatenate([np_frame, np_clone], axis=1).transpose((2, 0, 1))
+                vid_frame = np_clone.transpose((2, 0, 1))
 
                 video.append(vid_frame)
 
@@ -653,7 +657,7 @@ def main():
         )
     wandb_logger = WandbLogger(project='DubbingForExtras_NR')
     model = NeuralRenderer(config, train_dataloader.dataset.ids, logger=wandb_logger)
-
+    checkpoint_callback = ModelCheckpoint(dirpath=checkpoint_path, save_top_k=2, monitor="val_loss")
     trainer = pl.Trainer(gpus=1, max_epochs=200,
                          callbacks=[ModelSummary(max_depth=2)],
                          default_root_dir=checkpoint_path, num_sanity_val_steps=0)

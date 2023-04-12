@@ -45,29 +45,29 @@ def main(config, model_checkpoint, ID, videos, val_videos, save_root):
     #model.eval()
     model.cuda()
 
-    for epoch in range(5):
+    for epoch in range(10):
 
         # Finetune
         texture_transfer_learning(dataset, model, ID, save_root)
 
         # Validate
-        if not os.path.exists(os.path.join(save_root, f'epoch_{epoch}')):
-            os.makedirs(os.path.join(save_root, f'epoch_{epoch}'))
-        for video in val_videos:
-            save_path = os.path.join(save_root, f'epoch_{epoch}', video + '.mp4')
-            test_model(validation_dataset, model, video, save_path)
+        #if not os.path.exists(os.path.join(save_root, f'epoch_{epoch}')):
+        #    os.makedirs(os.path.join(save_root, f'epoch_{epoch}'))
+        #for video in val_videos:
+        #    save_path = os.path.join(save_root, f'epoch_{epoch}', video + '.mp4')
+        #    test_model(validation_dataset, model, video, save_path)
 
-    for epoch in range(5):
+    for epoch in range(10):
 
         # Finetune
         finetune_model(dataset, model, ID, save_root)
 
-        # Validate
-        if not os.path.exists(os.path.join(save_root, f'epoch_{epoch + 5}')):
-            os.makedirs(os.path.join(save_root, f'epoch_{epoch + 5}'))
-        for video in val_videos:
-            save_path = os.path.join(save_root, f'epoch_{epoch + 5}', video + '.mp4')
-            test_model(validation_dataset, model, video, save_path)
+    # Validate
+    if not os.path.exists(os.path.join(save_root, f'videos')):
+        os.makedirs(os.path.join(save_root, f'videos'))
+    for video in val_videos:
+        save_path = os.path.join(save_root, f'videos', video + '.mp4')
+        test_model(validation_dataset, model, video, save_path)
 
     for video in val_videos:
         test_model(validation_dataset, model, video, save_root)
@@ -85,14 +85,13 @@ if __name__ == '__main__':
 
     for ID in ['M009', 'M030', 'W011']:
 
-        for n_vid in [1, 5, 10, 30]:
+        for n_vid in [1, 3, 5, 10, 30]:
 
             #ID = 'M009'
             video_idxs = list(range(n_vid)) #[0] #[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
             videos = [f'{ID}_{i}' for i in video_idxs]
-            val_videos_idxs = [36, 37]  #[f'{ID}_{i}' for i in range(40) if i not in video_idxs]
+            val_videos_idxs = [35, 36, 37, 38, 39]  #[f'{ID}_{i}' for i in range(40) if i not in video_idxs]
             val_videos = [f'{ID}_{i}' for i in val_videos_idxs]
-
 
             save_root = f"C:/Users/jacks/Documents/Data/DubbingForExtras/test/finetune_{ID}_{len(videos)}_videos"
 
