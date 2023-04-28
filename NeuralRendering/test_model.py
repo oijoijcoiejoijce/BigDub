@@ -11,7 +11,7 @@ def test_model(dataset, model, video_name, save_root):
     save_path = os.path.join(save_root, video_name + '.mp4')
     video = model.create_video_from_generator(gen, length)
 
-    writer = cv2.VideoWriter(save_path, cv2.VideoWriter_fourcc(*'mp4v'), 30, (video.shape[2], video.shape[1]))
+    writer = cv2.VideoWriter(save_path, cv2.VideoWriter_fourcc(*'mp4v'), 30, (video.shape[3], video.shape[2]))
     for frame in video:
         frame = frame.transpose(1, 2, 0)
         frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
@@ -26,7 +26,7 @@ def main(config, model_checkpoint, videos, save_root):
 
     data_root = config.get('Paths', 'data')
     dataset = DubbingDataset(data_root,
-                             data_types=[DataTypes.MEL, DataTypes.Params, DataTypes.Frames, DataTypes.ID], split='test',
+                             data_types=[DataTypes.MEL, DataTypes.Params, DataTypes.Frames, DataTypes.ID], split='all',
                              T=5)
 
     model = NeuralRenderer.load_from_checkpoint(model_checkpoint, config=config, IDs=dataset.ids, strict=False)
@@ -45,9 +45,13 @@ if __name__ == '__main__':
     config_path = 'configs/Laptop.ini'
     config.read(config_path)
 
-    checkpoint = "C:/Users/jacks/Documents/Data/DubbingForExtras/checkpoints/render/epoch=99-step=186300.ckpt"
-    videos = ['M003_32', 'M005_35', 'W021_38', 'W025_33']
+    model = "M009_03"
 
-    save_root = "C:/Users/jacks/Documents/Data/DubbingForExtras/test/render_basic"
+    for model in ["M009_01", "M009_30", "W011_10", "W011_30"]:
 
-    main(config, checkpoint, videos, save_root)
+        checkpoint = f"C:/Users/jacks/Documents/Data/DubbingForExtras/checkpoints/PersonSpecificModels/{model}.ckpt"
+        videos = [f'{model.split("_")[0]}_{i:02d}' for i in range(35, 40)]
+
+        save_root = f"C:/Users/jacks/Documents/Data/DubbingForExtras/test/{model}"
+
+        main(config, checkpoint, videos, save_root)

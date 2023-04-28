@@ -362,7 +362,7 @@ class UnetSkipConnectionBlock_Audio(nn.Module):
         # use_norm = False
         use_norm = True
 
-        downconv = nn.Conv2d(input_nc, inner_nc, kernel_size=4, stride=2, padding=1, bias=use_bias)
+        downconv = nn.Conv2d(input_nc + 32, inner_nc, kernel_size=4, stride=2, padding=1, bias=use_bias)
         downrelu = nn.LeakyReLU(0.2, True)
         # downattn = SelfAttentionBlock(inner_nc)
 
@@ -371,7 +371,7 @@ class UnetSkipConnectionBlock_Audio(nn.Module):
         if use_norm: upnorm = norm_layer(outer_nc)
 
         if outermost:
-            fisrt_conv = nn.Conv2d(input_nc + inner_nc, inner_nc, kernel_size=7, stride=1, padding=3, bias=use_bias)
+            fisrt_conv = nn.Conv2d(input_nc + 32, inner_nc, kernel_size=7, stride=1, padding=3, bias=use_bias)
             downconv = nn.Conv2d(inner_nc, inner_nc, kernel_size=4, stride=2, padding=1, bias=use_bias)
 
             upconv = nn.Sequential(
@@ -422,7 +422,9 @@ class UnetSkipConnectionBlock_Audio(nn.Module):
                 model = down + [submodule] + up
 
         self.model = nn.ModuleList(model)
-        self.cond_layer = nn.Linear(cond_nc, inner_nc, bias=False)
+        self.cond_layer = nn.Sequential(nn.Linear(cond_nc, 64),
+                                        nn.LeakyReLU(),
+                                        nn.Linear(64, 32))
 
     def forward(self, x, cond=None):
         if self.outermost:
@@ -435,6 +437,12 @@ class UnetSkipConnectionBlock_Audio(nn.Module):
             return x
         else:
             y = x.clone()
+
+            cond = self.cond_layer(cond)
+            cond = cond.unsqueeze(-1).unsqueeze(-1)
+            cond = cond.repeat(1, 1, x.size(2), x.size(3))
+            y = torch.cat([y, cond], 1)
+
             for layer in self.model:
                 y = layer(y)
 
