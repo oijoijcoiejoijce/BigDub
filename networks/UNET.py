@@ -246,9 +246,109 @@ class UnetSkipConnectionBlock_ADAIN(nn.Module):
             y = (y * sigma[..., None, None]) + mu[..., None, None]
             return torch.cat([x, y], 1)
 
+
+# with bilinear upsampling
+class UnetSkipConnectionBlock_Attn(nn.Module):
+    def __init__(self, outer_nc, inner_nc, input_nc=None, submodule=None, outermost=False, innermost=False,
+                 norm_layer=nn.BatchNorm2d, use_dropout=False, cond_nc=512):
+        super(UnetSkipConnectionBlock_Attn, self).__init__()
+        self.outermost = outermost
+        self.innermost = innermost
+        if type(norm_layer) == functools.partial:
+            use_bias = norm_layer.func == nn.InstanceNorm2d
+        else:
+            use_bias = norm_layer == nn.InstanceNorm2d
+        if input_nc is None:
+            input_nc = outer_nc
+
+        # use_norm = False
+        use_norm = True
+
+        downconv = nn.Conv2d(input_nc, inner_nc, kernel_size=4, stride=2, padding=1, bias=use_bias)
+        downrelu = nn.LeakyReLU(0.2, True)
+        # downattn = SelfAttentionBlock(inner_nc)
+
+        if use_norm: downnorm = norm_layer(inner_nc)
+        uprelu = nn.ReLU(True)
+        if use_norm: upnorm = norm_layer(outer_nc)
+
+        if outermost:
+            # upconv = nn.ConvTranspose2d(inner_nc * 2, outer_nc, kernel_size=4, stride=2, padding=1)
+            upconv = nn.Sequential(
+                nn.Upsample(scale_factor=2, mode="bilinear", align_corners=False),
+                nn.Conv2d(inner_nc * 2, inner_nc * 2, kernel_size=3, stride=1, padding=1, bias=use_bias),
+                nn.LeakyReLU(0.2, True),
+                nn.Conv2d(inner_nc * 2, inner_nc * 2, kernel_size=3, stride=1, padding=1, bias=use_bias),
+                nn.LeakyReLU(0.2, True),
+                nn.Conv2d(inner_nc * 2, outer_nc, kernel_size=1, stride=1, padding=0, bias=use_bias),
+            )
+
+            down = [downconv]
+            up = [uprelu, upconv, nn.Tanh()]
+            model = down + [submodule] + up
+        elif innermost:
+            # upconv = nn.ConvTranspose2d(inner_nc, outer_nc, kernel_size=4, stride=2, padding=1, bias=use_bias)
+            upconv = nn.Sequential(
+                nn.Upsample(scale_factor=2, mode="bilinear", align_corners=False),
+                nn.Conv2d(inner_nc, outer_nc, kernel_size=3, stride=1, padding=1, bias=use_bias),
+                nn.LeakyReLU(0.2, True),
+                # SelfAttentionBlock(outer_nc)
+            )
+
+            down = [downrelu, downconv]
+            if use_norm:
+                up = [uprelu, upconv, upnorm]
+            else:
+                up = [uprelu, upconv]
+            model = down + up
+        else:
+            # upconv = nn.ConvTranspose2d(inner_nc * 2, outer_nc, kernel_size=4, stride=2, padding=1, bias=use_bias)
+            upconv = nn.Sequential(
+                nn.Upsample(scale_factor=2, mode="bilinear", align_corners=False),
+                nn.Conv2d(inner_nc * 2, outer_nc, kernel_size=3, stride=1, padding=1, bias=use_bias),
+                nn.LeakyReLU(0.2, True)
+            )
+
+            if use_norm: down = [downrelu, downconv, downnorm]
+            down = [downrelu, downconv]
+            if use_norm:
+                up = [uprelu, upconv, upnorm]
+            else:
+                up = [uprelu, upconv]
+
+            if use_dropout:
+                model = down + [submodule] + up + [nn.Dropout(0.5)]
+            else:
+                model = down + [submodule] + up
+
+        self.model = nn.ModuleList(model)
+        self.cond_layer = nn.Linear(cond_nc, outer_nc, bias=False)
+        self.crossattn = CrossAttention(outer_nc)
+
+    def forward(self, x, cond=None):
+        if self.outermost:
+            for layer in self.model:
+                if isinstance(layer, UnetSkipConnectionBlock_ADAIN) or isinstance(layer, UnetSkipConnectionBlock_Attn):
+                    x = layer(x, cond)
+                else:
+                    x = layer(x)
+            return x
+        else:
+            y = x.clone()
+            for layer in self.model:
+                if isinstance(layer, UnetSkipConnectionBlock_Attn):
+                    y = layer(y, cond)
+                else:
+                    y = layer(y)
+            if cond is not None:
+                cond_mapped = self.cond_layer(cond)
+                y = self.crossattn(y, cond_mapped)
+
+            return torch.cat([x, y], 1)
+
 class UnetSkipConnectionBlock_Audio(nn.Module):
     def __init__(self, outer_nc, inner_nc, input_nc=None, submodule=None, outermost=False, innermost=False,
-                 norm_layer=nn.BatchNorm2d, use_dropout=False, cond_nc=64):
+                 norm_layer=nn.BatchNorm2d, use_dropout=False, cond_nc=512):
         super(UnetSkipConnectionBlock_Audio, self).__init__()
         self.outermost = outermost
         self.innermost = innermost
@@ -262,7 +362,7 @@ class UnetSkipConnectionBlock_Audio(nn.Module):
         # use_norm = False
         use_norm = True
 
-        downconv = nn.Conv2d(input_nc + 32, inner_nc, kernel_size=4, stride=2, padding=1, bias=use_bias)
+        downconv = nn.Conv2d(input_nc, inner_nc, kernel_size=4, stride=2, padding=1, bias=use_bias)
         downrelu = nn.LeakyReLU(0.2, True)
         # downattn = SelfAttentionBlock(inner_nc)
 
@@ -322,9 +422,7 @@ class UnetSkipConnectionBlock_Audio(nn.Module):
                 model = down + [submodule] + up
 
         self.model = nn.ModuleList(model)
-        self.cond_layer = nn.Sequential(nn.Linear(cond_nc, 64),
-                                        nn.LeakyReLU(),
-                                        nn.Linear(64, 32))
+        self.cond_layer = nn.Linear(cond_nc, 32)
 
     def forward(self, x, cond=None):
         if self.outermost:
@@ -337,12 +435,6 @@ class UnetSkipConnectionBlock_Audio(nn.Module):
             return x
         else:
             y = x.clone()
-
-            cond = self.cond_layer(cond)
-            cond = cond.unsqueeze(-1).unsqueeze(-1)
-            cond = cond.repeat(1, 1, x.size(2), x.size(3))
-            y = torch.cat([y, cond], 1)
-
             for layer in self.model:
                 y = layer(y)
 
