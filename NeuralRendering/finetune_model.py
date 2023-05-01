@@ -85,7 +85,7 @@ if __name__ == '__main__':
     # checkpoint = "C:/Users/jacks/Documents/Data/DubbingForExtras/checkpoints/render/epoch=99-step=186300.ckpt"
     checkpoint = "C:/Users/jacks/Documents/Data/DubbingForExtras/checkpoints/render/epoch=199-step=496800.ckpt"
 
-    for ID in ['M030', 'W011']:  # 'M009'
+    for ID in ['M009']:  # ['M030', 'W011']:  # 'M009'
 
         for n_vid in [1, 3, 5, 10, 30]:
 
