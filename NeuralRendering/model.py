@@ -212,7 +212,7 @@ class NeuralRenderer(pl.LightningModule):
                    }, step=self.trainer.global_step)
 
         torch.nn.utils.clip_grad_norm_(self.unet.parameters(), 0.1)
-        torch.nn.utils.clip_grad_norm_(self.textures, 0.1)
+        #torch.nn.utils.clip_grad_norm_(self.textures, 0.1)
 
         opt_tex.step()
         opt_img.step()
