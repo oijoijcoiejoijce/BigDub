@@ -498,7 +498,7 @@ class NeuralRenderer(pl.LightningModule):
                 optim.zero_grad()
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(self.unet.parameters(), 0.1)
-                torch.nn.utils.clip_grad_norm_(self.textures, 0.1)
+                #torch.nn.utils.clip_grad_norm_(self.textures, 0.1)
                 optim.step()
 
                 iters += 1
@@ -648,7 +648,7 @@ class NeuralRenderer(pl.LightningModule):
                 optim.zero_grad()
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(self.unet.parameters(), 0.1)
-                torch.nn.utils.clip_grad_norm_(self.textures, 0.1)
+                #torch.nn.utils.clip_grad_norm_(self.textures, 0.1)
                 optim.step()
 
                 iters += 1
