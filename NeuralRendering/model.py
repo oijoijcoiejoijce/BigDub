@@ -148,6 +148,7 @@ class NeuralRenderer(pl.LightningModule):
         opt_discriminator.zero_grad()
 
         if D_loss > 0.01:
+            torch.nn.utils.clip_grad_norm_(self.discriminator.parameters(), 0.1)
             self.manual_backward(loss)
 
         opt_discriminator.step()
@@ -209,6 +210,9 @@ class NeuralRenderer(pl.LightningModule):
                    "loss_G_adv": loss_G_adv,
                    "loss_vgg": loss_vgg,
                    }, step=self.trainer.global_step)
+
+        torch.nn.utils.clip_grad_norm_(self.unet.parameters(), 0.1)
+        torch.nn.utils.clip_grad_norm_(self.textures, 0.1)
 
         opt_tex.step()
         opt_img.step()
@@ -493,6 +497,8 @@ class NeuralRenderer(pl.LightningModule):
 
                 optim.zero_grad()
                 loss.backward()
+                torch.nn.utils.clip_grad_norm_(self.unet.parameters(), 0.1)
+                torch.nn.utils.clip_grad_norm_(self.textures, 0.1)
                 optim.step()
 
                 iters += 1
@@ -641,6 +647,8 @@ class NeuralRenderer(pl.LightningModule):
 
                 optim.zero_grad()
                 loss.backward()
+                torch.nn.utils.clip_grad_norm_(self.unet.parameters(), 0.1)
+                torch.nn.utils.clip_grad_norm_(self.textures, 0.1)
                 optim.step()
 
                 iters += 1
